@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env
+docker/.env
+docker/certs/*
+!docker/certs/.gitkeep
+*.log
+
+# Flutter / Dart
+client/.dart_tool/
+client/.flutter-plugin-dependencies
+client/build/
+client/android/.gradle/
+client/windows/flutter/ephemeral/
+client/**/ephemeral/

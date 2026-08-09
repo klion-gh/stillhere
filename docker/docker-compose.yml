@@ -1,0 +1,82 @@
+name: stillhere
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ../server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL}
+      PORT: 3000
+      HOST: 0.0.0.0
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      TURN_SECRET: ${TURN_SECRET}
+      TURN_URL: ${NODE_HOST}:3478
+      TURN_TTL_SECONDS: 3600
+      NODE_TOKEN_SECRET: ${NODE_TOKEN_SECRET}
+      NODE_TOKEN_TTL: ${NODE_TOKEN_TTL}
+      NODE_SETUP_PASSWORD: ${NODE_SETUP_PASSWORD}
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/etc/caddy/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  coturn:
+    image: coturn/coturn:4.6
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - -n
+      - --log-file=stdout
+      - --listening-port=3478
+      - --tls-listening-port=5349
+      - --min-port=49160
+      - --max-port=49200
+      - --realm=${NODE_HOST}
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET}
+      - --no-cli
+      - --fingerprint
+      - --no-multicast-peers
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

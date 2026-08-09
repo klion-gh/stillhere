@@ -1,0 +1,5 @@
+{$DOMAIN} {
+	tls {$ACME_EMAIL}
+
+	reverse_proxy backend:3000
+}

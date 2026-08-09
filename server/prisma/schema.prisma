@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Single-row table: the shared secret that gates this node. Bootstrapped
+// once from NODE_SETUP_PASSWORD on first server start (see src/index.ts).
+model NodeConfig {
+  id           String   @id @default(uuid())
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  conversationsAsA Conversation[] @relation("ConversationUserA")
+  conversationsAsB Conversation[] @relation("ConversationUserB")
+  messages         Message[]
+}
+
+model Conversation {
+  id        String   @id @default(uuid())
+  userAId   String
+  userBId   String
+  createdAt DateTime @default(now())
+
+  userA    User      @relation("ConversationUserA", fields: [userAId], references: [id])
+  userB    User      @relation("ConversationUserB", fields: [userBId], references: [id])
+  messages Message[]
+
+  @@unique([userAId, userBId])
+}
+
+model Message {
+  id             String    @id @default(uuid())
+  conversationId String
+  senderId       String
+  content        String
+  createdAt      DateTime  @default(now())
+  deliveredAt    DateTime?
+  readAt         DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  sender       User          @relation(fields: [senderId], references: [id])
+
+  @@index([conversationId, createdAt])
+}

@@ -1,0 +1,134 @@
+# StillHere
+
+Приватный self-hosted мессенджер для своих: чат и аудиозвонки 1:1, авторизация только по `@username` + паролю. Клиенты — Android и Windows (Flutter, один кодбейс). Бэкенд — Node.js/TypeScript, поднимается на любом вашем сервере одной командой.
+
+Любой желающий может развернуть свой собственный **узел** (сервер) и пригласить туда друзей — данные остаются только на этом узле, никакого центрального сервиса StillHere нет. MIT license — код можно свободно форкать и менять.
+
+## Как это работает
+
+1. Вы разворачиваете узел на своём Linux-сервере одной командой (см. ниже) и задаёте **пароль узла**.
+2. Друзья открывают приложение StillHere, на экране подключения вводят адрес вашего узла и этот пароль — так их устройство "спаривается" с узлом и получает долгоживущий токен доступа.
+3. После этого каждый сам регистрирует personal-аккаунт по `@тегу` и своему собственному паролю — уже на этом узле. Тег и пароль профиля отдельные от пароля узла.
+4. Дальше — обычный мессенджер: чат и звонки между пользователями одного узла.
+
+Пароль узла не даёт доступ ни к чьей переписке сам по себе — это просто фильтр "свой/чужой" на уровне сервера, чтобы случайный человек, узнавший IP, не мог даже увидеть форму регистрации.
+
+---
+
+## Установка узла (one-liner)
+
+Нужен чистый сервер на Debian или Ubuntu с root-доступом.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/<owner>/stillhere/main/install.sh | sudo bash
+```
+
+Установщик сам:
+- поставит Docker, если его нет;
+- спросит пароль узла и (опционально) домен;
+- сгенерирует все секреты;
+- настроит TLS — self-signed сертификат с TOFU-проверкой на клиенте, если домена нет, либо ваш существующий сертификат/новый через Let's Encrypt, если домен есть;
+- поднимет весь стек (`docker compose up -d`).
+
+В конце выведет адрес узла (и, если сертификат self-signed, его SHA-256 отпечаток) — это и нужно будет ввести в приложении StillHere на экране подключения.
+
+Подробности того, что именно делает установщик, и на какие переменные окружения можно повлиять — см. [install.sh](install.sh) и [docker/.env.example](docker/.env.example).
+
+---
+
+## Структура репозитория
+
+```
+server/     Fastify + TypeScript + Prisma backend (REST + WebSocket)
+client/     Flutter app (Android + Windows)
+docker/     docker-compose для деплоя узла (postgres, backend, caddy, coturn)
+install.sh  one-liner установщик узла
+```
+
+## Что есть и чего пока нет
+
+Есть: пейринг с узлом по паролю, регистрация/логин по тегу, 1:1 текстовый чат в реальном времени с историей, 1:1 аудиозвонки через WebRTC (STUN/TURN для обхода NAT), TLS без домена через self-signed + TOFU pinning на клиенте.
+
+Пока нет (сознательно отложено): групповые чаты, push-уведомления. Из второго следует ограничение — **входящий звонок или сообщение долетят, только пока приложение открыто** (на Android — пока живёт процесс/foreground service). Полноценные пуши через Firebase Cloud Messaging — следующий шаг.
+
+---
+
+## Локальная разработка
+
+### Backend
+
+Нужен Docker (для Postgres) и Node.js 22+.
+
+```bash
+cd server
+cp .env.example .env
+# впишите в .env любой NODE_SETUP_PASSWORD — этим паролем клиент будет
+# спариваться с локальным сервером через экран подключения
+npm install
+docker run -d --name stillhere-postgres -e POSTGRES_USER=stillhere -e POSTGRES_PASSWORD=stillhere -e POSTGRES_DB=stillhere -p 5432:5432 postgres:16-alpine
+npm run prisma:migrate    # создаст таблицы
+npm run dev                # http://localhost:3000, healthcheck: GET /health
+```
+
+### Client (Flutter)
+
+Flutter SDK не входил в текущее окружение сборки — исходники (`pubspec.yaml`, `lib/`) написаны, но нативные обёртки `android/` и `windows/` генерируются самим Flutter CLI и в репозитории их пока нет. Один раз перед первым запуском:
+
+```bash
+cd client
+flutter create . --platforms=android,windows --org com.stillhere   # сгенерирует android/ и windows/, не тронет lib/
+flutter pub get
+flutter run -d windows      # или -d <android-device-id>
+```
+
+Адрес сервера **не** зашивается в сборку — при первом запуске приложение спросит адрес узла и пароль узла (экран подключения) и запомнит их локально. Для локальной разработки укажите там `localhost:3000` (Android-эмулятору вместо `localhost` может понадобиться `10.0.2.2`) и `NODE_SETUP_PASSWORD` из `server/.env`.
+
+**Важно про разрешения на микрофон** — `flutter create` не включает их по умолчанию, без этого шага звонки не будут работать:
+
+- **Android** (`android/app/src/main/AndroidManifest.xml`): добавьте внутри `<manifest>` перед `<application>`:
+  ```xml
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.BLUETOOTH" />
+  ```
+- **Windows** (`windows/runner/Runner.rc` / capabilities не требуются для Win32-сборки без MSIX-упаковки — `flutter_webrtc` на Windows desktop использует системный API напрямую; если будете паковать в MSIX, добавьте capability `microphone` в `Package.appxmanifest`).
+
+---
+
+## Ручной деплой на VPS (без установщика)
+
+Если не хотите использовать `install.sh` — например, сервер не Debian/Ubuntu — можно повторить его шаги руками; сам скрипт [install.sh](install.sh) написан достаточно линейно, чтобы служить документацией. Коротко:
+
+1. Docker + Docker Compose на сервере.
+2. `git clone` этого репозитория.
+3. `cp docker/.env.example docker/.env` и заполнить: `NODE_HOST` (домен или IP), при наличии домена — `DOMAIN`/`ACME_EMAIL`, секреты (`openssl rand -hex 32` для каждого `*_SECRET`), `NODE_SETUP_PASSWORD` — пароль, который вы дадите друзьям.
+4. `docker/Caddyfile` — по умолчанию в репозитории настроен на домен + автоматический Let's Encrypt. Для self-signed/IP-варианта или переиспользования уже имеющегося сертификата смотрите, какой `Caddyfile` генерирует `install.sh`, и повторите вручную (генерация self-signed сертификата — обычный `openssl req -x509 ...`, пример есть в скрипте).
+5. Открыть порты в файрволе (`ufw` пример):
+   ```bash
+   ufw allow 80/tcp
+   ufw allow 443/tcp
+   ufw allow 3478/tcp
+   ufw allow 3478/udp
+   ufw allow 5349/tcp
+   ufw allow 5349/udp
+   ufw allow 49160:49200/udp   # TURN relay range, см. docker-compose.yml
+   ```
+   coturn запущен с `network_mode: host`, поэтому его порты не идут через `docker-compose ports:` — открывать нужно именно в файрволе хоста.
+6. `cd docker && docker compose up -d --build`. При первом старте backend-контейнер сам применит миграции Prisma и захеширует `NODE_SETUP_PASSWORD` в базу (дальше эта переменная больше не используется, можно оставить в `.env` — она идемпотентна).
+7. Проверка: `curl https://ваш-адрес/health` → `{"status":"ok"}`.
+
+### Обновление после изменений в коде
+
+```bash
+cd docker
+git pull
+docker compose up -d --build backend
+```
+
+Postgres-данные хранятся в именованном volume `stillhere_postgres_data` и не теряются между пересборками.
+
+## Лицензия
+
+[MIT](LICENSE).
