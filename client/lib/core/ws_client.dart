@@ -5,7 +5,10 @@ import 'dart:io';
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'logger.dart';
 import 'node_http_client.dart';
+
+const _tag = 'ws';
 
 /// Thin wrapper around a single WebSocket connection to the node. One
 /// connection per authenticated session; events are broadcast to whichever
@@ -31,6 +34,7 @@ class WsClient {
     disconnect();
 
     final uri = Uri.parse('wss://$host/ws?nodeToken=$nodeToken&token=$userToken');
+    AppLogger.info(_tag, 'connecting to $host...');
     final httpClient = HttpClient()
       ..badCertificateCallback = buildPinningCallback(
         pinnedFingerprint: pinnedFingerprint,
@@ -39,30 +43,40 @@ class WsClient {
 
     try {
       final rawSocket = await WebSocket.connect(uri.toString(), customClient: httpClient);
+      AppLogger.info(_tag, 'connected to $host');
       final channel = IOWebSocketChannel(rawSocket);
       _channel = channel;
       _rawSub = channel.stream.listen(
         (raw) {
           try {
             final decoded = jsonDecode(raw as String) as Map<String, dynamic>;
+            AppLogger.info(_tag, 'recv: ${decoded['type']}');
             _eventsController.add(decoded);
-          } catch (_) {
-            // Ignore malformed frames.
+          } catch (e, st) {
+            AppLogger.error(_tag, 'failed to decode incoming frame', e, st);
           }
         },
         onDone: () {
+          AppLogger.warn(_tag, 'connection closed (code=${channel.closeCode}, reason=${channel.closeReason})');
           _channel = null;
         },
-        onError: (_) {
+        onError: (e, st) {
+          AppLogger.error(_tag, 'connection error', e, st);
           _channel = null;
         },
       );
-    } catch (_) {
+    } catch (e, st) {
+      AppLogger.error(_tag, 'failed to connect to $host', e, st);
       _channel = null;
     }
   }
 
   void send(Map<String, dynamic> event) {
+    if (_channel == null) {
+      AppLogger.warn(_tag, 'send(${event['type']}) dropped: not connected');
+      return;
+    }
+    AppLogger.info(_tag, 'send: ${event['type']}');
     _channel?.sink.add(jsonEncode(event));
   }
 

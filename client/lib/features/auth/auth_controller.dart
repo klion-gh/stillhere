@@ -1,10 +1,13 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/logger.dart';
 import '../../core/providers.dart';
 import '../../models/user.dart';
 import '../connect/node_client.dart';
 import 'auth_state.dart';
+
+const _tag = 'auth';
 
 class AuthException implements Exception {
   final String message;
@@ -72,11 +75,13 @@ class AuthController extends AsyncNotifier<AuthState> {
             username: user.username,
           );
 
+      AppLogger.info(_tag, '$path succeeded for @${user.username}');
       state = AsyncValue.data(AuthState(user: user, accessToken: accessToken, refreshToken: refreshToken));
     } on DioException catch (e) {
       final code = (e.response?.data is Map) ? (e.response?.data as Map)['error'] as String? : null;
       final message = _messageForError(code);
       final authException = AuthException(message);
+      AppLogger.error(_tag, '$path failed (code=$code)', e);
       state = AsyncValue.error(authException, StackTrace.current);
       throw authException;
     }
@@ -98,14 +103,17 @@ class AuthController extends AsyncNotifier<AuthState> {
 
       await ref.read(tokenStorageProvider).saveTokens(accessToken: accessToken, refreshToken: newRefreshToken);
       state = AsyncValue.data(current!.copyWith(accessToken: accessToken, refreshToken: newRefreshToken));
+      AppLogger.info(_tag, 'access token refreshed');
       return true;
-    } catch (_) {
+    } catch (e) {
+      AppLogger.error(_tag, 'token refresh failed, logging out', e);
       await logout();
       return false;
     }
   }
 
   Future<void> logout() async {
+    AppLogger.info(_tag, 'logging out');
     await ref.read(tokenStorageProvider).clear();
     ref.read(wsClientProvider).disconnect();
     state = const AsyncValue.data(AuthState());

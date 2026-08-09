@@ -5,7 +5,10 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../../core/api_client.dart';
 import '../../core/incoming_call.dart';
+import '../../core/logger.dart';
 import '../../core/providers.dart';
+
+const _tag = 'call';
 
 enum CallPhase { incomingRinging, outgoingRinging, connecting, active, ended }
 
@@ -48,16 +51,31 @@ final callControllerProvider =
 class CallController extends StateNotifier<CallUiState> {
   CallController(this._ref, this.args)
       : super(CallUiState(phase: args.isOutgoing ? CallPhase.connecting : CallPhase.incomingRinging)) {
-    _ref.read(activeCallConversationIdProvider.notifier).state = args.conversationId;
+    AppLogger.info(_tag, 'created for ${args.conversationId} (outgoing=${args.isOutgoing})');
+
+    // Riverpod forbids a provider from writing another provider's state
+    // synchronously while it's still being built (this constructor runs
+    // inside callControllerProvider's own `create` callback) — defer to a
+    // microtask so it runs right after this provider finishes building.
+    Future.microtask(() {
+      if (mounted) {
+        _ref.read(activeCallConversationIdProvider.notifier).state = args.conversationId;
+      }
+    });
+
     _wsSub = _ref.read(wsClientProvider).events.listen(_onWsEvent);
     if (args.isOutgoing) {
       unawaited(_startOutgoingCall());
     } else {
       final pending = _ref.read(pendingIncomingCallProvider);
-      _ref.read(pendingIncomingCallProvider.notifier).state = null;
       if (pending != null && pending.conversationId == args.conversationId) {
         _pendingOfferSdp = pending.sdp;
       }
+      Future.microtask(() {
+        if (mounted) {
+          _ref.read(pendingIncomingCallProvider.notifier).state = null;
+        }
+      });
     }
   }
 
@@ -81,11 +99,13 @@ class CallController extends StateNotifier<CallUiState> {
     if (_pc != null) return;
 
     final iceServers = await _fetchIceServers();
+    AppLogger.info(_tag, 'fetched ${iceServers.length} ICE server(s): ${iceServers.map((s) => s['urls']).toList()}');
     final pc = await createPeerConnection({'iceServers': iceServers});
     _pc = pc;
 
     pc.onIceCandidate = (candidate) {
       if (candidate.candidate == null) return;
+      AppLogger.info(_tag, 'local ICE candidate: ${candidate.candidate}');
       _ref.read(wsClientProvider).send({
         'type': 'call:ice-candidate',
         'conversationId': args.conversationId,
@@ -98,6 +118,7 @@ class CallController extends StateNotifier<CallUiState> {
     };
 
     pc.onConnectionState = (connState) {
+      AppLogger.info(_tag, 'peer connection state: $connState');
       if (connState == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
         if (mounted) state = state.copyWith(phase: CallPhase.active);
       } else if (connState == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
@@ -105,7 +126,12 @@ class CallController extends StateNotifier<CallUiState> {
       }
     };
 
+    pc.onIceConnectionState = (iceState) {
+      AppLogger.info(_tag, 'ICE connection state: $iceState');
+    };
+
     _localStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
+    AppLogger.info(_tag, 'got local audio stream (${_localStream!.getAudioTracks().length} track(s))');
     for (final track in _localStream!.getAudioTracks()) {
       await pc.addTrack(track, _localStream!);
     }
@@ -116,13 +142,15 @@ class CallController extends StateNotifier<CallUiState> {
       await _ensurePeerConnection();
       final offer = await _pc!.createOffer();
       await _pc!.setLocalDescription(offer);
+      AppLogger.info(_tag, 'sending offer for ${args.conversationId}');
       _ref.read(wsClientProvider).send({
         'type': 'call:offer',
         'conversationId': args.conversationId,
         'sdp': {'sdp': offer.sdp, 'type': offer.type},
       });
       if (mounted) state = state.copyWith(phase: CallPhase.outgoingRinging);
-    } catch (e) {
+    } catch (e, st) {
+      AppLogger.error(_tag, 'failed to start outgoing call', e, st);
       if (mounted) state = state.copyWith(phase: CallPhase.ended, error: 'Нет доступа к микрофону');
     }
   }
@@ -130,7 +158,10 @@ class CallController extends StateNotifier<CallUiState> {
   /// Called when the callee taps "Accept" on an incoming call.
   Future<void> acceptIncomingCall() async {
     final sdp = _pendingOfferSdp;
-    if (sdp == null) return;
+    if (sdp == null) {
+      AppLogger.warn(_tag, 'acceptIncomingCall called with no pending offer');
+      return;
+    }
     if (mounted) state = state.copyWith(phase: CallPhase.connecting);
 
     try {
@@ -141,22 +172,27 @@ class CallController extends StateNotifier<CallUiState> {
 
       final answer = await _pc!.createAnswer();
       await _pc!.setLocalDescription(answer);
+      AppLogger.info(_tag, 'sending answer for ${args.conversationId}');
       _ref.read(wsClientProvider).send({
         'type': 'call:answer',
         'conversationId': args.conversationId,
         'sdp': {'sdp': answer.sdp, 'type': answer.type},
       });
-    } catch (e) {
+    } catch (e, st) {
+      AppLogger.error(_tag, 'failed to accept incoming call', e, st);
       if (mounted) state = state.copyWith(phase: CallPhase.ended, error: 'Нет доступа к микрофону');
     }
   }
 
   void declineIncomingCall() {
+    AppLogger.info(_tag, 'declining incoming call for ${args.conversationId}');
     _ref.read(wsClientProvider).send({'type': 'call:end', 'conversationId': args.conversationId});
     if (mounted) state = state.copyWith(phase: CallPhase.ended);
   }
 
   Future<void> _drainPendingCandidates() async {
+    if (_pendingRemoteCandidates.isEmpty) return;
+    AppLogger.info(_tag, 'draining ${_pendingRemoteCandidates.length} pending ICE candidate(s)');
     for (final c in _pendingRemoteCandidates) {
       await _pc?.addCandidate(c);
     }
@@ -168,19 +204,24 @@ class CallController extends StateNotifier<CallUiState> {
 
     switch (event['type']) {
       case 'call:answer':
+        AppLogger.info(_tag, 'received answer for ${args.conversationId}');
         _handleAnswer(event['sdp'] as Map<String, dynamic>);
         break;
       case 'call:ice-candidate':
         _handleRemoteCandidate(event['candidate'] as Map<String, dynamic>);
         break;
       case 'call:end':
+        AppLogger.info(_tag, 'peer ended call ${args.conversationId}');
         if (mounted) state = state.copyWith(phase: CallPhase.ended);
         break;
     }
   }
 
   Future<void> _handleAnswer(Map<String, dynamic> sdp) async {
-    if (_pc == null) return;
+    if (_pc == null) {
+      AppLogger.warn(_tag, 'received answer with no local peer connection');
+      return;
+    }
     await _pc!.setRemoteDescription(RTCSessionDescription(sdp['sdp'] as String, sdp['type'] as String));
     _remoteDescriptionSet = true;
     await _drainPendingCandidates();
@@ -188,6 +229,7 @@ class CallController extends StateNotifier<CallUiState> {
   }
 
   Future<void> _handleRemoteCandidate(Map<String, dynamic> c) async {
+    AppLogger.info(_tag, 'remote ICE candidate: ${c['candidate']}');
     final candidate = RTCIceCandidate(
       c['candidate'] as String?,
       c['sdpMid'] as String?,
@@ -202,12 +244,14 @@ class CallController extends StateNotifier<CallUiState> {
 
   void hangUp() {
     if (state.phase != CallPhase.ended) {
+      AppLogger.info(_tag, 'hanging up ${args.conversationId}');
       _ref.read(wsClientProvider).send({'type': 'call:end', 'conversationId': args.conversationId});
       state = state.copyWith(phase: CallPhase.ended);
     }
   }
 
   Future<void> disposeCall() async {
+    AppLogger.info(_tag, 'disposing call controller for ${args.conversationId}');
     await _wsSub?.cancel();
     for (final track in _localStream?.getTracks() ?? <MediaStreamTrack>[]) {
       await track.stop();

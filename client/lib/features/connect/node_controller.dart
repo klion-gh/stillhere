@@ -4,9 +4,12 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/logger.dart';
 import '../../core/node_http_client.dart';
 import '../../core/providers.dart';
 import 'node_state.dart';
+
+const _tag = 'node';
 
 class NodeController extends AsyncNotifier<NodeState> {
   @override
@@ -52,6 +55,7 @@ class NodeController extends AsyncNotifier<NodeState> {
     dio.httpClientAdapter = IOHttpClientAdapter(createHttpClient: () => httpClient);
 
     try {
+      AppLogger.info(_tag, 'pairing with $host...');
       final res = await dio.post('/node/pair', data: {'password': password});
       final nodeToken = res.data['nodeToken'] as String;
       final fingerprintToStore = newlyPinned ?? pinned;
@@ -62,9 +66,11 @@ class NodeController extends AsyncNotifier<NodeState> {
         await storage.saveFingerprint(fingerprintToStore);
       }
 
+      AppLogger.info(_tag, 'paired with $host');
       state = AsyncValue.data(NodeState(host: host, nodeToken: nodeToken, pinnedFingerprint: fingerprintToStore));
-    } catch (e) {
+    } catch (e, st) {
       final exception = _mapError(e);
+      AppLogger.error(_tag, 'pairing with $host failed', e, st);
       state = AsyncValue.error(exception, StackTrace.current);
       throw exception;
     }
@@ -101,6 +107,7 @@ class NodeController extends AsyncNotifier<NodeState> {
   /// explicitly switches servers and when the node token itself is
   /// rejected server-side (password rotated, node reinstalled, etc).
   Future<void> disconnect() async {
+    AppLogger.warn(_tag, 'disconnecting from node');
     await ref.read(nodeStorageProvider).clearAll();
     state = const AsyncValue.data(NodeState());
   }

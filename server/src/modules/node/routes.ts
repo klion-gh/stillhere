@@ -17,14 +17,17 @@ export async function nodeRoutes(app: FastifyInstance) {
 
     const config = await prisma.nodeConfig.findFirst();
     if (!config) {
+      request.log.error("node/pair: no NodeConfig row — bootstrap did not run");
       return reply.code(503).send({ error: "node_not_configured" });
     }
 
     const ok = await bcrypt.compare(parsed.data.password, config.passwordHash);
     if (!ok) {
+      request.log.warn({ ip: request.ip }, "node/pair: wrong password");
       return reply.code(401).send({ error: "invalid_node_password" });
     }
 
+    request.log.info({ ip: request.ip }, "node/pair: paired successfully");
     return reply.send({ nodeToken: signNodeToken() });
   });
 }

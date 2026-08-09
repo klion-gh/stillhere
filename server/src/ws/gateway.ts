@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyBaseLogger } from "fastify";
 import type { WebSocket } from "ws";
 import { z } from "zod";
 import { prisma } from "../db/prisma.js";
@@ -32,21 +32,26 @@ async function broadcastPresence(userId: string, status: "online" | "offline") {
 }
 
 export async function wsGateway(app: FastifyInstance) {
+  const log: FastifyBaseLogger = app.log;
+
   app.get("/ws", { websocket: true }, (socket: WebSocket, request) => {
     const { token, nodeToken } = request.query as { token?: string; nodeToken?: string };
 
     if (!nodeToken) {
+      log.warn({ ip: request.ip }, "ws: rejected, missing node token");
       socket.close(4001, "missing_node_token");
       return;
     }
     try {
       verifyNodeToken(nodeToken);
     } catch {
+      log.warn({ ip: request.ip }, "ws: rejected, invalid node token");
       socket.close(4001, "invalid_node_token");
       return;
     }
 
     if (!token) {
+      log.warn({ ip: request.ip }, "ws: rejected, missing user token");
       socket.close(4001, "missing_token");
       return;
     }
@@ -56,10 +61,12 @@ export async function wsGateway(app: FastifyInstance) {
       const payload = verifyAccessToken(token);
       userId = payload.sub;
     } catch {
+      log.warn({ ip: request.ip }, "ws: rejected, invalid user token");
       socket.close(4001, "invalid_token");
       return;
     }
 
+    log.info({ userId }, "ws: connected");
     addConnection(userId, socket);
     void broadcastPresence(userId, "online");
 
@@ -69,15 +76,22 @@ export async function wsGateway(app: FastifyInstance) {
         try {
           parsedJson = JSON.parse(raw.toString());
         } catch {
+          log.warn({ userId }, "ws: dropped non-JSON frame");
           return;
         }
 
         const parsed = clientMessageSchema.safeParse(parsedJson);
-        if (!parsed.success) return;
+        if (!parsed.success) {
+          log.warn({ userId, issues: parsed.error.issues }, "ws: dropped frame failing schema validation");
+          return;
+        }
         const msg = parsed.data;
 
         const peerId = await getPeerId(msg.conversationId, userId);
-        if (!peerId) return;
+        if (!peerId) {
+          log.warn({ userId, conversationId: msg.conversationId, type: msg.type }, "ws: dropped, no such conversation for sender");
+          return;
+        }
 
         if (msg.type === "message:send") {
           let saved = await prisma.message.create({
@@ -88,6 +102,7 @@ export async function wsGateway(app: FastifyInstance) {
             message: saved,
             clientId: msg.clientId,
           });
+          log.info({ userId, peerId, conversationId: msg.conversationId, delivered }, "ws: message relayed");
           if (delivered) {
             saved = await prisma.message.update({ where: { id: saved.id }, data: { deliveredAt: new Date() } });
           }
@@ -96,11 +111,13 @@ export async function wsGateway(app: FastifyInstance) {
         }
 
         // WebRTC signaling: pure relay, no persistence.
-        sendToUser(peerId, { ...msg, from: userId });
+        const delivered = sendToUser(peerId, { ...msg, from: userId });
+        log.info({ userId, peerId, conversationId: msg.conversationId, type: msg.type, delivered }, "ws: call signal relayed");
       })();
     });
 
     socket.on("close", () => {
+      log.info({ userId }, "ws: disconnected");
       removeConnection(userId, socket);
       if (!isOnline(userId)) {
         void broadcastPresence(userId, "offline");

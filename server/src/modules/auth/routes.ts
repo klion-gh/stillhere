@@ -33,11 +33,13 @@ export async function authRoutes(app: FastifyInstance) {
 
     const existing = await prisma.user.findUnique({ where: { username } });
     if (existing) {
+      request.log.warn({ username }, "auth/register: username taken");
       return reply.code(409).send({ error: "username_taken" });
     }
 
     const passwordHash = await bcrypt.hash(parsed.data.password, BCRYPT_ROUNDS);
     const user = await prisma.user.create({ data: { username, passwordHash } });
+    request.log.info({ userId: user.id, username }, "auth/register: new user");
 
     const accessToken = signAccessToken(user.id, user.username);
     const refreshToken = signRefreshToken(user.id);
@@ -57,14 +59,17 @@ export async function authRoutes(app: FastifyInstance) {
     const username = normalizeUsername(parsed.data.username);
     const user = await prisma.user.findUnique({ where: { username } });
     if (!user) {
+      request.log.warn({ username }, "auth/login: no such user");
       return reply.code(401).send({ error: "invalid_credentials" });
     }
 
     const ok = await bcrypt.compare(parsed.data.password, user.passwordHash);
     if (!ok) {
+      request.log.warn({ userId: user.id, username }, "auth/login: wrong password");
       return reply.code(401).send({ error: "invalid_credentials" });
     }
 
+    request.log.info({ userId: user.id, username }, "auth/login: success");
     const accessToken = signAccessToken(user.id, user.username);
     const refreshToken = signRefreshToken(user.id);
     return reply.send({
