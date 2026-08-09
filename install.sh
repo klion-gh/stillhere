@@ -119,7 +119,8 @@ main() {
   fi
 
   log "Настройка узла"
-  local node_password domain acme_email node_host
+  local node_password domain node_host
+  local acme_email=""
   node_password="$(prompt_node_password)"
   domain="$(prompt STILLHERE_DOMAIN "Домен, указывающий на этот сервер (Enter, если нет — подключение будет по IP): ")"
 
