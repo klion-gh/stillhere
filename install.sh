@@ -58,9 +58,11 @@ fetch_repo() {
 # Prompts for a value, honoring an env var override for non-interactive runs.
 prompt() {
   local var_name="$1" prompt_text="$2" default_value="${3:-}"
-  local env_value="${!var_name:-}"
-  if [ -n "$env_value" ]; then
-    printf '%s\n' "$env_value"
+  # Test whether the var is SET at all (even to an empty string), not just
+  # non-empty — STILLHERE_DOMAIN="" must be able to mean "skip the prompt,
+  # no domain" for non-interactive runs.
+  if [ -n "${!var_name+x}" ]; then
+    printf '%s\n' "${!var_name}"
     return
   fi
   local reply
