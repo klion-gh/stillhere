@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../../core/api_client.dart';
+import '../../core/call_notifications.dart';
 import '../../core/incoming_call.dart';
 import '../../core/logger.dart';
 import '../../core/providers.dart';
@@ -12,14 +14,50 @@ const _tag = 'call';
 
 enum CallPhase { incomingRinging, outgoingRinging, connecting, active, ended }
 
+class AudioInputDevice {
+  final String id;
+  final String label;
+
+  const AudioInputDevice({required this.id, required this.label});
+}
+
 class CallUiState {
   final CallPhase phase;
   final String? error;
+  final bool micMuted;
+  final bool speakerOn;
+  final List<AudioInputDevice> inputDevices;
+  final String? selectedInputDeviceId;
+  final Duration elapsed;
 
-  const CallUiState({required this.phase, this.error});
+  const CallUiState({
+    required this.phase,
+    this.error,
+    this.micMuted = false,
+    this.speakerOn = false,
+    this.inputDevices = const [],
+    this.selectedInputDeviceId,
+    this.elapsed = Duration.zero,
+  });
 
-  CallUiState copyWith({CallPhase? phase, String? error}) {
-    return CallUiState(phase: phase ?? this.phase, error: error ?? this.error);
+  CallUiState copyWith({
+    CallPhase? phase,
+    String? error,
+    bool? micMuted,
+    bool? speakerOn,
+    List<AudioInputDevice>? inputDevices,
+    String? selectedInputDeviceId,
+    Duration? elapsed,
+  }) {
+    return CallUiState(
+      phase: phase ?? this.phase,
+      error: error ?? this.error,
+      micMuted: micMuted ?? this.micMuted,
+      speakerOn: speakerOn ?? this.speakerOn,
+      inputDevices: inputDevices ?? this.inputDevices,
+      selectedInputDeviceId: selectedInputDeviceId ?? this.selectedInputDeviceId,
+      elapsed: elapsed ?? this.elapsed,
+    );
   }
 }
 
@@ -71,6 +109,7 @@ class CallController extends StateNotifier<CallUiState> {
       if (pending != null && pending.conversationId == args.conversationId) {
         _pendingOfferSdp = pending.sdp;
       }
+      unawaited(_ref.read(ringtoneServiceProvider).playIncoming());
       Future.microtask(() {
         if (mounted) {
           _ref.read(pendingIncomingCallProvider.notifier).state = null;
@@ -88,11 +127,25 @@ class CallController extends StateNotifier<CallUiState> {
   final List<RTCIceCandidate> _pendingRemoteCandidates = [];
   bool _remoteDescriptionSet = false;
   Map<String, dynamic>? _pendingOfferSdp;
+  Timer? _elapsedTimer;
 
   Future<List<Map<String, dynamic>>> _fetchIceServers() async {
     final dio = _ref.read(apiClientProvider);
     final res = await dio.get('/calls/ice-servers');
     return (res.data['iceServers'] as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> _stopRingtone() async {
+    await _ref.read(ringtoneServiceProvider).stop();
+    await CallNotifications.cancelIncomingCall();
+  }
+
+  void _startElapsedTimer() {
+    _elapsedTimer?.cancel();
+    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      state = state.copyWith(elapsed: state.elapsed + const Duration(seconds: 1));
+    });
   }
 
   Future<void> _ensurePeerConnection() async {
@@ -120,8 +173,13 @@ class CallController extends StateNotifier<CallUiState> {
     pc.onConnectionState = (connState) {
       AppLogger.info(_tag, 'peer connection state: $connState');
       if (connState == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
-        if (mounted) state = state.copyWith(phase: CallPhase.active);
+        unawaited(_stopRingtone());
+        if (mounted && state.phase != CallPhase.active) {
+          state = state.copyWith(phase: CallPhase.active);
+          _startElapsedTimer();
+        }
       } else if (connState == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+        unawaited(_stopRingtone());
         if (mounted) state = state.copyWith(phase: CallPhase.ended, error: 'Не удалось соединиться');
       }
     };
@@ -134,6 +192,32 @@ class CallController extends StateNotifier<CallUiState> {
     AppLogger.info(_tag, 'got local audio stream (${_localStream!.getAudioTracks().length} track(s))');
     for (final track in _localStream!.getAudioTracks()) {
       await pc.addTrack(track, _localStream!);
+    }
+
+    unawaited(_loadInputDevices());
+  }
+
+  /// Enumerates microphones so the desktop UI can offer a picker. Only
+  /// meaningful once getUserMedia has granted permission — before that,
+  /// labels come back empty on most platforms.
+  Future<void> _loadInputDevices() async {
+    try {
+      final devices = await navigator.mediaDevices.enumerateDevices();
+      final inputs = devices
+          .where((d) => d.kind == 'audioinput')
+          .map((d) => AudioInputDevice(
+                id: d.deviceId,
+                label: d.label.isNotEmpty ? d.label : 'Микрофон ${d.deviceId}',
+              ))
+          .toList();
+      if (mounted && inputs.isNotEmpty) {
+        state = state.copyWith(
+          inputDevices: inputs,
+          selectedInputDeviceId: state.selectedInputDeviceId ?? inputs.first.id,
+        );
+      }
+    } catch (e, st) {
+      AppLogger.error(_tag, 'failed to enumerate audio inputs', e, st);
     }
   }
 
@@ -149,8 +233,10 @@ class CallController extends StateNotifier<CallUiState> {
         'sdp': {'sdp': offer.sdp, 'type': offer.type},
       });
       if (mounted) state = state.copyWith(phase: CallPhase.outgoingRinging);
+      unawaited(_ref.read(ringtoneServiceProvider).playOutgoing());
     } catch (e, st) {
       AppLogger.error(_tag, 'failed to start outgoing call', e, st);
+      await _stopRingtone();
       if (mounted) state = state.copyWith(phase: CallPhase.ended, error: 'Нет доступа к микрофону');
     }
   }
@@ -162,6 +248,7 @@ class CallController extends StateNotifier<CallUiState> {
       AppLogger.warn(_tag, 'acceptIncomingCall called with no pending offer');
       return;
     }
+    await _stopRingtone();
     if (mounted) state = state.copyWith(phase: CallPhase.connecting);
 
     try {
@@ -186,8 +273,46 @@ class CallController extends StateNotifier<CallUiState> {
 
   void declineIncomingCall() {
     AppLogger.info(_tag, 'declining incoming call for ${args.conversationId}');
+    unawaited(_stopRingtone());
     _ref.read(wsClientProvider).send({'type': 'call:end', 'conversationId': args.conversationId});
     if (mounted) state = state.copyWith(phase: CallPhase.ended);
+  }
+
+  /// Mutes/unmutes the outgoing audio track. Disabling the track (rather
+  /// than removing it) keeps the negotiated connection intact.
+  Future<void> toggleMute() async {
+    final tracks = _localStream?.getAudioTracks() ?? [];
+    if (tracks.isEmpty) return;
+    final newMuted = !state.micMuted;
+    for (final track in tracks) {
+      track.enabled = !newMuted;
+    }
+    AppLogger.info(_tag, 'mic ${newMuted ? 'muted' : 'unmuted'}');
+    if (mounted) state = state.copyWith(micMuted: newMuted);
+  }
+
+  /// Android-only: routes audio between earpiece and loudspeaker.
+  Future<void> toggleSpeaker() async {
+    if (!Platform.isAndroid) return;
+    final newSpeakerOn = !state.speakerOn;
+    try {
+      await Helper.setSpeakerphoneOn(newSpeakerOn);
+      AppLogger.info(_tag, 'speakerphone ${newSpeakerOn ? 'on' : 'off'}');
+      if (mounted) state = state.copyWith(speakerOn: newSpeakerOn);
+    } catch (e, st) {
+      AppLogger.error(_tag, 'failed to toggle speakerphone', e, st);
+    }
+  }
+
+  /// Desktop-focused: switches which microphone feeds the call.
+  Future<void> selectInputDevice(String deviceId) async {
+    try {
+      await Helper.selectAudioInput(deviceId);
+      AppLogger.info(_tag, 'switched audio input to $deviceId');
+      if (mounted) state = state.copyWith(selectedInputDeviceId: deviceId);
+    } catch (e, st) {
+      AppLogger.error(_tag, 'failed to select audio input', e, st);
+    }
   }
 
   Future<void> _drainPendingCandidates() async {
@@ -212,6 +337,7 @@ class CallController extends StateNotifier<CallUiState> {
         break;
       case 'call:end':
         AppLogger.info(_tag, 'peer ended call ${args.conversationId}');
+        unawaited(_stopRingtone());
         if (mounted) state = state.copyWith(phase: CallPhase.ended);
         break;
     }
@@ -222,10 +348,13 @@ class CallController extends StateNotifier<CallUiState> {
       AppLogger.warn(_tag, 'received answer with no local peer connection');
       return;
     }
+    await _stopRingtone();
     await _pc!.setRemoteDescription(RTCSessionDescription(sdp['sdp'] as String, sdp['type'] as String));
     _remoteDescriptionSet = true;
     await _drainPendingCandidates();
-    if (mounted) state = state.copyWith(phase: CallPhase.connecting);
+    if (mounted && state.phase != CallPhase.active) {
+      state = state.copyWith(phase: CallPhase.connecting);
+    }
   }
 
   Future<void> _handleRemoteCandidate(Map<String, dynamic> c) async {
@@ -245,6 +374,7 @@ class CallController extends StateNotifier<CallUiState> {
   void hangUp() {
     if (state.phase != CallPhase.ended) {
       AppLogger.info(_tag, 'hanging up ${args.conversationId}');
+      unawaited(_stopRingtone());
       _ref.read(wsClientProvider).send({'type': 'call:end', 'conversationId': args.conversationId});
       state = state.copyWith(phase: CallPhase.ended);
     }
@@ -252,6 +382,8 @@ class CallController extends StateNotifier<CallUiState> {
 
   Future<void> disposeCall() async {
     AppLogger.info(_tag, 'disposing call controller for ${args.conversationId}');
+    _elapsedTimer?.cancel();
+    await _stopRingtone();
     await _wsSub?.cancel();
     for (final track in _localStream?.getTracks() ?? <MediaStreamTrack>[]) {
       await track.stop();

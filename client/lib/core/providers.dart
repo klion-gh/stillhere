@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'node_storage.dart';
+import 'ringtone_service.dart';
 import 'token_storage.dart';
 import 'ws_client.dart';
 
@@ -12,4 +13,10 @@ final wsClientProvider = Provider<WsClient>((ref) {
   final client = WsClient();
   ref.onDispose(client.dispose);
   return client;
+});
+
+final ringtoneServiceProvider = Provider<RingtoneService>((ref) {
+  final service = RingtoneService();
+  ref.onDispose(service.dispose);
+  return service;
 });

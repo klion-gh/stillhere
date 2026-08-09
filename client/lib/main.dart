@@ -5,10 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
+import 'core/call_notifications.dart';
 import 'core/logger.dart';
 
 void main() {
-  runZonedGuarded(() {
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+
     FlutterError.onError = (details) {
       AppLogger.error('flutter', details.exceptionAsString(), details.exception, details.stack);
       FlutterError.presentError(details);
@@ -17,6 +20,8 @@ void main() {
       AppLogger.error('platform', error.toString(), error, stack);
       return true;
     };
+
+    await CallNotifications.init();
     runApp(const ProviderScope(child: StillHereApp()));
   }, (error, stack) {
     AppLogger.error('uncaught', error.toString(), error, stack);

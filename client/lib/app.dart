@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/call_notifications.dart';
 import 'core/incoming_call.dart';
 import 'core/providers.dart';
 import 'core/router.dart';
+import 'core/theme.dart';
 import 'features/auth/auth_controller.dart';
 import 'features/connect/node_controller.dart';
 import 'features/conversations/conversations_controller.dart';
@@ -50,6 +52,9 @@ class _StillHereAppState extends ConsumerState<StillHereApp> {
     );
 
     final peerUsername = _resolvePeerUsername(conversationId) ?? '';
+    // Heads-up notification so the call is visible even if the app is
+    // backgrounded (the ringtone itself is started by CallController).
+    unawaited(CallNotifications.showIncomingCall(peerUsername));
     ref.read(routerProvider).push('/call/$conversationId?peer=$peerUsername&outgoing=false');
   }
 
@@ -108,8 +113,9 @@ class _StillHereAppState extends ConsumerState<StillHereApp> {
     return MaterialApp.router(
       title: 'StillHere',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true, brightness: Brightness.light),
-      darkTheme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true, brightness: Brightness.dark),
+      theme: buildAppTheme(),
+      darkTheme: buildAppTheme(),
+      themeMode: ThemeMode.dark,
       routerConfig: router,
     );
   }
