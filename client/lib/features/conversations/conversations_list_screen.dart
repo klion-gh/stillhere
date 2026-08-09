@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/update_checker.dart';
 import '../auth/auth_controller.dart';
 import '../connect/node_controller.dart';
 import 'conversations_controller.dart';
@@ -10,15 +12,47 @@ import 'conversations_controller.dart';
 class ConversationsListScreen extends ConsumerWidget {
   const ConversationsListScreen({super.key});
 
+  Future<void> _showUpdateDialog(BuildContext context, UpdateInfo info) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Доступно обновление'),
+        content: Text(
+          'Новая версия: ${info.latest.version}\nУ вас: ${info.currentVersion}',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Позже')),
+          FilledButton(
+            onPressed: () {
+              launchUrl(Uri.parse(info.downloadUrl), mode: LaunchMode.externalApplication);
+              Navigator.of(context).pop();
+            },
+            child: const Text('Скачать'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final conversationsAsync = ref.watch(conversationsProvider);
     final username = ref.watch(authControllerProvider).valueOrNull?.user?.username;
+    final updateInfo = ref.watch(updateCheckProvider).valueOrNull;
 
     return Scaffold(
       appBar: AppBar(
         title: Text(username != null ? '@$username' : 'StillHere'),
         actions: [
+          if (updateInfo != null)
+            IconButton(
+              icon: const Badge(
+                smallSize: 8,
+                child: Icon(Icons.system_update),
+              ),
+              tooltip: 'Доступно обновление ${updateInfo.latest.version}',
+              onPressed: () => _showUpdateDialog(context, updateInfo),
+            ),
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'logout') {
