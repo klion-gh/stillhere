@@ -20,7 +20,7 @@
 Нужен чистый сервер на Debian или Ubuntu с root-доступом.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<owner>/stillhere/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/klion-gh/stillhere/main/install.sh | sudo bash
 ```
 
 Установщик сам:

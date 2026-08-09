@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # StillHere node installer.
 #
-#   curl -fsSL https://raw.githubusercontent.com/<owner>/stillhere/main/install.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/klion-gh/stillhere/main/install.sh | sudo bash
 #
 # Turns a fresh Debian/Ubuntu server into a StillHere node: installs Docker
 # if needed, generates all secrets, sets up TLS (self-signed by IP, or your
@@ -10,8 +10,7 @@
 # existing installation instead of silently overwriting secrets.
 set -euo pipefail
 
-# TODO: update this once the repository is published.
-REPO_URL="${STILLHERE_REPO_URL:-https://github.com/CHANGE_ME/stillhere.git}"
+REPO_URL="${STILLHERE_REPO_URL:-https://github.com/klion-gh/stillhere.git}"
 INSTALL_DIR="${STILLHERE_DIR:-$HOME/stillhere}"
 
 log()  { printf '\n\033[1;36m==>\033[0m %s\n' "$1"; }
