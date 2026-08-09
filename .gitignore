@@ -6,6 +6,9 @@ docker/certs/*
 !docker/certs/.gitkeep
 *.log
 
+# Claude Code session state (not project code)
+.claude/
+
 # Flutter / Dart
 client/.dart_tool/
 client/.flutter-plugin-dependencies
