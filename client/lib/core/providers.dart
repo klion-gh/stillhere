@@ -20,3 +20,9 @@ final ringtoneServiceProvider = Provider<RingtoneService>((ref) {
   ref.onDispose(service.dispose);
   return service;
 });
+
+/// Live WebSocket connectivity, for the "connection lost" banner. Starts
+/// optimistic so the UI doesn't flash a warning during initial connect.
+final wsConnectedProvider = StreamProvider<bool>((ref) {
+  return ref.watch(wsClientProvider).connectionState;
+});

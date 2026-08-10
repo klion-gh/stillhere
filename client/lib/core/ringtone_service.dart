@@ -24,7 +24,7 @@ class RingtoneService {
     }
   }
 
-  Future<void> playIncoming() => _play('sounds/ring_incoming.wav', volume: 1.0);
+  Future<void> playIncoming() => _play('sounds/ring_incoming.mp3', volume: 1.0);
 
   Future<void> playOutgoing() => _play('sounds/ring_outgoing.wav', volume: 0.5);
 

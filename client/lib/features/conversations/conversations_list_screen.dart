@@ -2,45 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/update_checker.dart';
 import '../../widgets/gradient_avatar.dart';
 import '../auth/auth_controller.dart';
 import '../connect/node_controller.dart';
+import '../updates/update_dialog.dart';
 import 'conversations_controller.dart';
 
 class ConversationsListScreen extends ConsumerWidget {
   const ConversationsListScreen({super.key});
-
-  Future<void> _showUpdateDialog(BuildContext context, UpdateInfo info) async {
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.system_update_rounded, color: AppColors.primary, size: 32),
-        title: const Text('Доступно обновление'),
-        content: Text('Новая версия: ${info.latest.version}\nУ вас: ${info.currentVersion}'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Позже')),
-          FilledButton(
-            style: FilledButton.styleFrom(minimumSize: const Size(120, 44)),
-            onPressed: () {
-              launchUrl(Uri.parse(info.downloadUrl), mode: LaunchMode.externalApplication);
-              Navigator.of(context).pop();
-            },
-            child: const Text('Скачать'),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final conversationsAsync = ref.watch(conversationsProvider);
     final username = ref.watch(authControllerProvider).valueOrNull?.user?.username;
     final updateInfo = ref.watch(updateCheckProvider).valueOrNull;
+    // No value yet means we're still on the initial connect — don't flash a
+    // warning before the first attempt has even resolved.
+    final wsConnected = ref.watch(wsConnectedProvider).valueOrNull ?? true;
 
     return Scaffold(
       body: NightBackdrop(
@@ -50,10 +32,11 @@ class ConversationsListScreen extends ConsumerWidget {
               _Header(
                 username: username,
                 updateInfo: updateInfo,
-                onUpdateTap: updateInfo == null ? null : () => _showUpdateDialog(context, updateInfo),
+                onUpdateTap: updateInfo == null ? null : () => UpdateDialog.show(context, updateInfo),
                 onLogout: () => ref.read(authControllerProvider.notifier).logout(),
                 onSwitchServer: () => ref.read(nodeControllerProvider.notifier).disconnect(),
               ),
+              if (!wsConnected) const _OfflineBanner(),
               Expanded(
                 child: RefreshIndicator(
                   color: AppColors.primary,
@@ -207,6 +190,43 @@ class _Header extends StatelessWidget {
                 ]),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Shown while the WebSocket is down — messages and calls can't reach this
+/// device until it's back, so it's worth surfacing rather than failing
+/// silently.
+class _OfflineBanner extends StatelessWidget {
+  const _OfflineBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.danger.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+      ),
+      child: const Row(
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.danger),
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Нет связи с сервером. Переподключаемся…',
+              style: TextStyle(color: AppColors.danger, fontSize: 13.5),
+            ),
           ),
         ],
       ),

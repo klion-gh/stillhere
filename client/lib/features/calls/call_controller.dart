@@ -340,6 +340,13 @@ class CallController extends StateNotifier<CallUiState> {
         unawaited(_stopRingtone());
         if (mounted) state = state.copyWith(phase: CallPhase.ended);
         break;
+      case 'call:unavailable':
+        AppLogger.warn(_tag, 'peer unreachable for ${args.conversationId}');
+        unawaited(_stopRingtone());
+        if (mounted) {
+          state = state.copyWith(phase: CallPhase.ended, error: 'Пользователь не в сети');
+        }
+        break;
     }
   }
 

@@ -9,6 +9,10 @@
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Lets the app hand a downloaded release APK to the system installer
+         for in-app updates. This only grants the right to ask; the user
+         still approves "install from this source" once. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application
         android:label="StillHere"
         android:name="${applicationName}"

@@ -4,7 +4,7 @@ publish_to: "none"
 # The +N build number becomes Android's versionCode. It must increase on
 # every release — Android compares versionCode (not the name) when deciding
 # whether an APK is an update, and refuses to install a lower one.
-version: 0.3.0+3
+version: 0.4.0+4
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -21,9 +21,10 @@ dependencies:
   intl: ^0.19.0
   crypto: ^3.0.3
   package_info_plus: ^8.0.0
-  url_launcher: ^6.3.0
   flutter_local_notifications: ^18.0.1
   audioplayers: ^6.1.0
+  path_provider: ^2.1.4
+  open_filex: ^4.5.0
 
 dev_dependencies:
   flutter_test:

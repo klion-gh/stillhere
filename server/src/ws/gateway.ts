@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { verifyAccessToken } from "../modules/auth/tokens.js";
 import { verifyNodeToken } from "../modules/node/tokens.js";
-import { addConnection, removeConnection, sendToUser, isOnline } from "./connections.js";
+import { addConnection, removeConnection, sendToUser, isOnline, startHeartbeat } from "./connections.js";
 
 const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("message:send"), conversationId: z.string(), content: z.string().min(1).max(4000), clientId: z.string().optional() }),
@@ -33,6 +33,9 @@ async function broadcastPresence(userId: string, status: "online" | "offline") {
 
 export async function wsGateway(app: FastifyInstance) {
   const log: FastifyBaseLogger = app.log;
+
+  const stopHeartbeat = startHeartbeat(log);
+  app.addHook("onClose", async () => stopHeartbeat());
 
   app.get("/ws", { websocket: true }, (socket: WebSocket, request) => {
     const { token, nodeToken } = request.query as { token?: string; nodeToken?: string };
@@ -113,6 +116,13 @@ export async function wsGateway(app: FastifyInstance) {
         // WebRTC signaling: pure relay, no persistence.
         const delivered = sendToUser(peerId, { ...msg, from: userId });
         log.info({ userId, peerId, conversationId: msg.conversationId, type: msg.type, delivered }, "ws: call signal relayed");
+
+        // Tell the caller immediately instead of letting them listen to a
+        // ringback for a peer who was never reachable.
+        if (!delivered && msg.type === "call:offer") {
+          sendToUser(userId, { type: "call:unavailable", conversationId: msg.conversationId });
+          log.warn({ userId, peerId, conversationId: msg.conversationId }, "ws: callee offline, offer not delivered");
+        }
       })();
     });
 
