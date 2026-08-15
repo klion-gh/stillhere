@@ -27,8 +27,14 @@ class ConnectionService {
         channelId: 'stillhere_connection',
         channelName: 'Соединение StillHere',
         channelDescription: 'Держит связь с сервером, чтобы доходили звонки и сообщения.',
-        channelImportance: NotificationChannelImportance.LOW,
-        priority: NotificationPriority.LOW,
+        // Android will not let a foreground service run without a
+        // notification, but MIN importance keeps it out of the status bar
+        // and tucks it into the shade's silent section — as close to
+        // invisible as the platform permits.
+        channelImportance: NotificationChannelImportance.MIN,
+        priority: NotificationPriority.MIN,
+        onlyAlertOnce: true,
+        showWhen: false,
       ),
       iosNotificationOptions: const IOSNotificationOptions(),
       foregroundTaskOptions: ForegroundTaskOptions(
@@ -56,8 +62,8 @@ class ConnectionService {
       }
 
       await FlutterForegroundTask.startService(
-        notificationTitle: 'StillHere на связи',
-        notificationText: 'Звонки и сообщения будут доходить',
+        notificationTitle: 'StillHere',
+        notificationText: 'На связи',
       );
       _started = true;
       AppLogger.info(_tag, 'foreground service started');

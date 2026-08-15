@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/desktop_shell.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/update_checker.dart';
@@ -163,33 +164,56 @@ class _Header extends StatelessWidget {
                 ],
               ),
             ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert_rounded),
-            onSelected: (value) {
-              if (value == 'logout') {
-                onLogout();
-              } else if (value == 'switch_server') {
-                onSwitchServer();
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'logout',
-                child: Row(children: [
-                  Icon(Icons.logout_rounded, size: 19),
-                  SizedBox(width: 12),
-                  Text('Выйти'),
-                ]),
-              ),
-              PopupMenuItem(
-                value: 'switch_server',
-                child: Row(children: [
-                  Icon(Icons.dns_rounded, size: 19),
-                  SizedBox(width: 12),
-                  Text('Сменить сервер'),
-                ]),
-              ),
-            ],
+          ValueListenableBuilder<bool>(
+            valueListenable: DesktopShell.instance.notificationsEnabledListenable,
+            builder: (context, notificationsOn, _) => PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert_rounded),
+              onSelected: (value) {
+                switch (value) {
+                  case 'logout':
+                    onLogout();
+                    break;
+                  case 'switch_server':
+                    onSwitchServer();
+                    break;
+                  case 'toggle_notifications':
+                    DesktopShell.instance.setNotificationsEnabled(!notificationsOn);
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                if (DesktopShell.isSupported)
+                  PopupMenuItem(
+                    value: 'toggle_notifications',
+                    child: Row(children: [
+                      Icon(
+                        notificationsOn
+                            ? Icons.notifications_active_rounded
+                            : Icons.notifications_off_rounded,
+                        size: 19,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(notificationsOn ? 'Выключить уведомления' : 'Включить уведомления'),
+                    ]),
+                  ),
+                const PopupMenuItem(
+                  value: 'logout',
+                  child: Row(children: [
+                    Icon(Icons.logout_rounded, size: 19),
+                    SizedBox(width: 12),
+                    Text('Выйти'),
+                  ]),
+                ),
+                const PopupMenuItem(
+                  value: 'switch_server',
+                  child: Row(children: [
+                    Icon(Icons.dns_rounded, size: 19),
+                    SizedBox(width: 12),
+                    Text('Сменить сервер'),
+                  ]),
+                ),
+              ],
+            ),
           ),
         ],
       ),

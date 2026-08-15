@@ -10,7 +10,7 @@
 ; Output: dist\stillhere.exe
 
 #define MyAppName "StillHere"
-#define MyAppVersion "0.5.0"
+#define MyAppVersion "0.6.0"
 #define MyAppPublisher "StillHere"
 #define MyAppExeName "stillhere.exe"
 #define SourceDir "..\..\build\windows\x64\runner\Release"

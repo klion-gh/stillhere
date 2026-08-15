@@ -5,11 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/call_notifications.dart';
 import 'core/connection_service.dart';
+import 'core/desktop_notifications.dart';
 import 'core/incoming_call.dart';
 import 'core/providers.dart';
 import 'core/router.dart';
 import 'core/theme.dart';
 import 'features/auth/auth_controller.dart';
+import 'features/calls/call_controller.dart';
 import 'features/connect/node_controller.dart';
 import 'features/conversations/conversations_controller.dart';
 
@@ -31,6 +33,59 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
     // Global listener: incoming calls and messages can arrive while the user
     // is anywhere in the app — or nowhere, with it backgrounded.
     _wsSub = ref.read(wsClientProvider).events.listen(_handleWsEvent);
+    CallNotifications.onCallAction = _handleCallNotificationAction;
+
+    DesktopNotifications.onCallAction = (conversationId, peerUsername, accept) {
+      _handleCallNotificationAction(CallNotificationEvent(
+        action: accept ? CallNotificationAction.accept : CallNotificationAction.open,
+        conversationId: conversationId,
+        peerUsername: peerUsername,
+      ));
+    };
+    DesktopNotifications.onMessageTap = (conversationId, peerUsername) {
+      ref.read(routerProvider).push('/chat/$conversationId', extra: peerUsername);
+    };
+  }
+
+  /// Accept/decline tapped on the Android call notification, or the
+  /// notification body itself (which should land on the call screen).
+  void _handleCallNotificationAction(CallNotificationEvent event) {
+    if (event.conversationId.isEmpty) return;
+
+    if (event.action == CallNotificationAction.decline) {
+      ref.read(wsClientProvider).send({
+        'type': 'call:end',
+        'conversationId': event.conversationId,
+      });
+      ref.read(pendingIncomingCallProvider.notifier).state = null;
+      unawaited(CallNotifications.cancelIncomingCall());
+      return;
+    }
+
+    final location = '/call/${event.conversationId}?peer=${event.peerUsername}&outgoing=false';
+    // The call screen may already be open (the app routes there as soon as
+    // the offer arrives); pushing a second copy would stack two controllers
+    // on the same call.
+    if (ref.read(activeCallConversationIdProvider) == event.conversationId) {
+      if (event.action == CallNotificationAction.accept) {
+        _acceptActiveCall(event);
+      }
+      return;
+    }
+    ref.read(routerProvider).push(location);
+    if (event.action == CallNotificationAction.accept) {
+      // Give the screen a frame to build its controller before answering.
+      Future.delayed(const Duration(milliseconds: 350), () => _acceptActiveCall(event));
+    }
+  }
+
+  void _acceptActiveCall(CallNotificationEvent event) {
+    final args = CallArgs(
+      conversationId: event.conversationId,
+      peerUsername: event.peerUsername,
+      isOutgoing: false,
+    );
+    unawaited(ref.read(callControllerProvider(args).notifier).acceptIncomingCall());
   }
 
   @override
@@ -81,9 +136,16 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
       unawaited(ref.read(conversationsProvider.notifier).refresh());
     }
 
-    // Heads-up notification so the call is visible even if the app is
-    // backgrounded (the ringtone itself is started by CallController).
-    unawaited(CallNotifications.showIncomingCall(peerUsername));
+    // Heads-up notification with accept/decline, and the ringtone on
+    // Android (a backgrounded app can't reliably play audio itself).
+    unawaited(CallNotifications.showIncomingCall(
+      conversationId: conversationId,
+      peerUsername: peerUsername,
+    ));
+    unawaited(DesktopNotifications.showIncomingCall(
+      conversationId: conversationId,
+      peerUsername: peerUsername,
+    ));
     ref.read(routerProvider).push('/call/$conversationId?peer=$peerUsername&outgoing=false');
   }
 
@@ -105,10 +167,16 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
     final viewing = ref.read(activeChatConversationIdProvider);
     if (_inForeground && viewing == conversationId) return;
 
+    final preview = (message['content'] as String?) ?? '';
     unawaited(CallNotifications.showMessage(
       conversationId: conversationId,
       senderUsername: senderUsername,
-      preview: (message['content'] as String?) ?? '',
+      preview: preview,
+    ));
+    unawaited(DesktopNotifications.showMessage(
+      conversationId: conversationId,
+      senderUsername: senderUsername,
+      preview: preview,
     ));
   }
 

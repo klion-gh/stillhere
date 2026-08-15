@@ -6,6 +6,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../../core/api_client.dart';
 import '../../core/call_notifications.dart';
+import '../../core/desktop_notifications.dart';
 import '../../core/incoming_call.dart';
 import '../../core/logger.dart';
 import '../../core/providers.dart';
@@ -155,6 +156,7 @@ class CallController extends StateNotifier<CallUiState> {
   Future<void> _stopRingtone() async {
     await _ref.read(ringtoneServiceProvider).stop();
     await CallNotifications.cancelIncomingCall();
+    await DesktopNotifications.cancelIncomingCall();
   }
 
   void _startElapsedTimer() {

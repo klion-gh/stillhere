@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:audioplayers/audioplayers.dart';
 
 import 'logger.dart';
@@ -24,7 +26,14 @@ class RingtoneService {
     }
   }
 
-  Future<void> playIncoming() => _play('sounds/ring_incoming.mp3', volume: 1.0);
+  /// On Android the incoming ring is played by the notification channel
+  /// instead — a backgrounded app often never gets audio focus, so the
+  /// notification is the only thing that reliably rings. Playing here too
+  /// would double it up.
+  Future<void> playIncoming() async {
+    if (Platform.isAndroid) return;
+    await _play('sounds/ring_incoming.mp3', volume: 1.0);
+  }
 
   Future<void> playOutgoing() => _play('sounds/ring_outgoing.wav', volume: 0.5);
 
