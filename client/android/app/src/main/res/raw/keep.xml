@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The call ringtone is only ever referenced by name from Dart, so Android's
+  resource shrinker has no way to see that it's used and would strip it from
+  release builds — leaving incoming calls silent. This pins it explicitly.
+-->
+<resources
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/ring_incoming"
+    tools:shrinkMode="safe" />
