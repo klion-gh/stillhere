@@ -29,6 +29,7 @@ class CallScreen extends ConsumerWidget {
       case CallPhase.connecting:
         return 'Соединение…';
       case CallPhase.active:
+        if (state.reconnecting) return 'Переподключение…';
         final d = state.elapsed;
         final m = d.inMinutes.toString().padLeft(2, '0');
         final s = (d.inSeconds % 60).toString().padLeft(2, '0');
@@ -153,18 +154,42 @@ class CallScreen extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Text(
-                    _phaseLabel(callState),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: callState.phase == CallPhase.active
-                          ? AppColors.accent
-                          : AppColors.textSecondary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (callState.reconnecting) ...[
+                        const SizedBox(
+                          width: 13,
+                          height: 13,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.danger),
+                        ),
+                        const SizedBox(width: 9),
+                      ],
+                      Text(
+                        _phaseLabel(callState),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: callState.reconnecting
+                              ? AppColors.danger
+                              : callState.phase == CallPhase.active
+                                  ? AppColors.accent
+                                  : AppColors.textSecondary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ],
                   ),
+                  if (callState.phase == CallPhase.active) ...[
+                    const SizedBox(height: 16),
+                    _PingRow(
+                      ownRttMs: callState.ownRttMs,
+                      peerRttMs: callState.peerRttMs,
+                      peerUsername: peerUsername,
+                    ),
+                  ],
                   if (callState.error != null) ...[
                     const SizedBox(height: 12),
                     Text(
@@ -185,6 +210,90 @@ class CallScreen extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Latency of each side to the node. Not the peer-to-peer path, but it's
+/// what tells you whose connection is the weak one.
+class _PingRow extends StatelessWidget {
+  final int? ownRttMs;
+  final int? peerRttMs;
+  final String peerUsername;
+
+  const _PingRow({required this.ownRttMs, required this.peerRttMs, required this.peerUsername});
+
+  static Color _colorFor(int? rtt) {
+    if (rtt == null) return AppColors.textMuted;
+    if (rtt < 100) return AppColors.success;
+    if (rtt < 250) return AppColors.accent;
+    return AppColors.danger;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _PingChip(label: 'Вы', rttMs: ownRttMs, color: _colorFor(ownRttMs)),
+        const SizedBox(width: 10),
+        _PingChip(
+          label: peerUsername.isNotEmpty ? '@$peerUsername' : 'Собеседник',
+          rttMs: peerRttMs,
+          color: _colorFor(peerRttMs),
+        ),
+      ],
+    );
+  }
+}
+
+class _PingChip extends StatelessWidget {
+  final String label;
+  final int? rttMs;
+  final Color color;
+
+  const _PingChip({required this.label, required this.rttMs, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: AppColors.surfaceOutline),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 7),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 92),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            rttMs != null ? '$rttMs мс' : '—',
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
       ),
     );
   }

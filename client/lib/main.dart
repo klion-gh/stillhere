@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
 import 'core/call_notifications.dart';
+import 'core/connection_service.dart';
 import 'core/logger.dart';
 
 void main() {
@@ -22,6 +23,7 @@ void main() {
     };
 
     await CallNotifications.init();
+    ConnectionService.init();
     runApp(const ProviderScope(child: StillHereApp()));
   }, (error, stack) {
     AppLogger.error('uncaught', error.toString(), error, stack);

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/call_notifications.dart';
+import '../../core/incoming_call.dart';
 import '../../core/theme.dart';
 import '../../widgets/gradient_avatar.dart';
 import '../auth/auth_controller.dart';
@@ -27,10 +29,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.initState();
     // Enables/disables the send button as the field fills and empties.
     _textController.addListener(() => setState(() {}));
+
+    // Mark this chat as open so its incoming messages don't fire a
+    // notification while the user is reading them, and clear any that
+    // arrived before they opened it.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(activeChatConversationIdProvider.notifier).state = widget.conversationId;
+      CallNotifications.cancelMessages(widget.conversationId);
+    });
   }
 
   @override
   void dispose() {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final active = container.read(activeChatConversationIdProvider);
+    if (active == widget.conversationId) {
+      container.read(activeChatConversationIdProvider.notifier).state = null;
+    }
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();

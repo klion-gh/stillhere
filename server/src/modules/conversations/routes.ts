@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { normalizeUsername } from "../users/username.js";
+import { sendToUser } from "../../ws/connections.js";
 
 const createConversationSchema = z.object({
   tag: z.string().min(1),
@@ -34,14 +35,37 @@ export async function conversationRoutes(app: FastifyInstance) {
 
     const [userAId, userBId] = orderedPair(request.userId!, target.id);
 
-    const conversation = await prisma.conversation.upsert({
+    const existing = await prisma.conversation.findUnique({
       where: { userAId_userBId: { userAId, userBId } },
-      update: {},
-      create: { userAId, userBId },
       include: { userA: true, userB: true },
     });
 
+    const conversation =
+      existing ??
+      (await prisma.conversation.create({
+        data: { userAId, userBId },
+        include: { userA: true, userB: true },
+      }));
+
     const peer = conversation.userA.id === request.userId ? conversation.userB : conversation.userA;
+    const self = conversation.userA.id === request.userId ? conversation.userA : conversation.userB;
+
+    // Push the new conversation to the other side so it appears in their
+    // list immediately. Without this the peer only learns about it on a
+    // manual refresh — and until then an incoming message or call from
+    // someone who "added" them has no conversation to attach to.
+    if (!existing) {
+      sendToUser(peer.id, {
+        type: "conversation:new",
+        conversation: {
+          id: conversation.id,
+          peer: { id: self.id, username: self.username },
+          createdAt: conversation.createdAt,
+        },
+      });
+      request.log.info({ userId: request.userId, peerId: peer.id, conversationId: conversation.id }, "conversation created");
+    }
+
     return reply.send({
       id: conversation.id,
       peer: { id: peer.id, username: peer.username },

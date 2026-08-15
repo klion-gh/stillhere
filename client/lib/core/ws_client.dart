@@ -17,6 +17,9 @@ const _tag = 'ws';
 /// surface as a disconnect instead of hanging forever in a half-open state.
 const _pingInterval = Duration(seconds: 20);
 
+/// How often to measure application-level latency to the node.
+const _rttProbeInterval = Duration(seconds: 5);
+
 const _minReconnectDelay = Duration(seconds: 1);
 const _maxReconnectDelay = Duration(seconds: 30);
 
@@ -27,10 +30,9 @@ const _maxReconnectDelay = Duration(seconds: 30);
 /// because only that API accepts a custom HttpClient — needed to pin the
 /// node's TLS certificate the same way core/node_client.dart does for REST.
 ///
-/// The connection is self-healing: it pings to detect dead sockets and
-/// reconnects with exponential backoff. Without this an incoming call
-/// simply never arrives — the server writes the offer into a socket that
-/// no longer exists on the other end.
+/// The connection is self-healing: it pings to detect dead sockets,
+/// reconnects with exponential backoff, and refreshes an expired access
+/// token when the server rejects it.
 class WsClient {
   WebSocketChannel? _channel;
   StreamSubscription? _rawSub;
@@ -44,18 +46,34 @@ class WsClient {
   String? _pinnedFingerprint;
   void Function(String)? _onFirstPin;
 
+  /// Asks the auth layer for a fresh access token. The access token expires
+  /// long before a session does, so without this the socket would be locked
+  /// out permanently the first time it outlives its token.
+  Future<String?> Function()? _refreshAccessToken;
+
   Timer? _reconnectTimer;
+  Timer? _rttTimer;
   int _reconnectAttempt = 0;
   bool _intentionallyClosed = false;
   bool _connecting = false;
+  bool _connected = false;
+  bool _refreshingToken = false;
+  int? _lastRttMs;
 
   Stream<Map<String, dynamic>> get events => _eventsController.stream;
 
-  /// Emits true on connect, false on disconnect — drives the UI's
-  /// "connection lost" indicator.
-  Stream<bool> get connectionState => _connectionStateController.stream;
+  /// Live connectivity, seeded with the current value so a widget that
+  /// subscribes after the connection was established doesn't sit on a null
+  /// (and render a bogus "disconnected" warning).
+  Stream<bool> get connectionState async* {
+    yield _connected;
+    yield* _connectionStateController.stream;
+  }
 
-  bool get isConnected => _channel != null;
+  bool get isConnected => _connected;
+
+  /// Most recent round trip to the node, or null before the first probe.
+  int? get lastRttMs => _lastRttMs;
 
   Future<void> connect({
     required String host,
@@ -63,15 +81,23 @@ class WsClient {
     required String userToken,
     required String? pinnedFingerprint,
     required void Function(String fingerprint) onFirstPin,
+    Future<String?> Function()? refreshAccessToken,
   }) async {
     _host = host;
     _nodeToken = nodeToken;
     _userToken = userToken;
     _pinnedFingerprint = pinnedFingerprint;
     _onFirstPin = onFirstPin;
+    _refreshAccessToken = refreshAccessToken;
     _intentionallyClosed = false;
     _reconnectAttempt = 0;
     await _open();
+  }
+
+  void _setConnected(bool value) {
+    if (_connected == value) return;
+    _connected = value;
+    _connectionStateController.add(value);
   }
 
   Future<void> _open() async {
@@ -105,12 +131,17 @@ class WsClient {
       _channel = channel;
       _reconnectAttempt = 0;
       _connecting = false;
-      _connectionStateController.add(true);
+      _setConnected(true);
+      _startRttProbe();
 
       _rawSub = channel.stream.listen(
         (raw) {
           try {
             final decoded = jsonDecode(raw as String) as Map<String, dynamic>;
+            if (decoded['type'] == 'net:pong') {
+              _handlePong(decoded);
+              return;
+            }
             AppLogger.info(_tag, 'recv: ${decoded['type']}');
             _eventsController.add(decoded);
           } catch (e, st) {
@@ -136,22 +167,67 @@ class WsClient {
     }
   }
 
+  void _handlePong(Map<String, dynamic> frame) {
+    final sentAt = frame['sentAt'];
+    if (sentAt is! int) return;
+    _lastRttMs = DateTime.now().millisecondsSinceEpoch - sentAt;
+    _eventsController.add({'type': 'net:rtt', 'rttMs': _lastRttMs});
+  }
+
+  void _startRttProbe() {
+    _rttTimer?.cancel();
+    _rttTimer = Timer.periodic(_rttProbeInterval, (_) {
+      if (!_connected) return;
+      send({'type': 'net:ping', 'sentAt': DateTime.now().millisecondsSinceEpoch});
+    });
+  }
+
   void _handleDrop({int? closeCode}) {
     _closeSocket();
     _connecting = false;
-    _connectionStateController.add(false);
+    _setConnected(false);
 
     if (_intentionallyClosed) return;
 
-    // 4001 is our own auth rejection (bad/expired token). Retrying with the
-    // same credentials would just loop, so leave it to the auth layer to
-    // refresh and reconnect.
+    // 4001 means the server rejected our credentials. Usually that's just an
+    // expired access token (they're short-lived) — refresh once and retry,
+    // rather than treating the session as dead.
     if (closeCode == 4001) {
-      AppLogger.warn(_tag, 'server rejected credentials; not reconnecting');
+      _reconnectWithFreshToken();
       return;
     }
 
     _scheduleReconnect();
+  }
+
+  Future<void> _reconnectWithFreshToken() async {
+    if (_refreshingToken) return;
+    final refresh = _refreshAccessToken;
+    if (refresh == null) {
+      AppLogger.warn(_tag, 'server rejected credentials and no refresh hook is set');
+      return;
+    }
+
+    _refreshingToken = true;
+    try {
+      AppLogger.info(_tag, 'access token rejected, refreshing...');
+      final fresh = await refresh();
+      if (fresh == null) {
+        // The refresh token is gone too — the auth layer has logged the user
+        // out, so there's nothing left to reconnect as.
+        AppLogger.warn(_tag, 'token refresh failed; giving up on reconnect');
+        return;
+      }
+      _userToken = fresh;
+      _reconnectAttempt = 0;
+      _refreshingToken = false;
+      await _open();
+    } catch (e, st) {
+      AppLogger.error(_tag, 'token refresh threw', e, st);
+      _scheduleReconnect();
+    } finally {
+      _refreshingToken = false;
+    }
   }
 
   void _scheduleReconnect() {
@@ -169,6 +245,8 @@ class WsClient {
   }
 
   void _closeSocket() {
+    _rttTimer?.cancel();
+    _rttTimer = null;
     _rawSub?.cancel();
     _rawSub = null;
     try {
@@ -184,7 +262,9 @@ class WsClient {
       AppLogger.warn(_tag, 'send(${event['type']}) dropped: not connected');
       return;
     }
-    AppLogger.info(_tag, 'send: ${event['type']}');
+    if (event['type'] != 'net:ping') {
+      AppLogger.info(_tag, 'send: ${event['type']}');
+    }
     _channel?.sink.add(jsonEncode(event));
   }
 
@@ -193,8 +273,9 @@ class WsClient {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
     _reconnectAttempt = 0;
+    _lastRttMs = null;
     _closeSocket();
-    _connectionStateController.add(false);
+    _setConnected(false);
   }
 
   void dispose() {

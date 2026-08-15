@@ -15,3 +15,7 @@ final pendingIncomingCallProvider = StateProvider<IncomingCall?>((ref) => null);
 /// Conversation id of the call currently in progress, if any. Used to
 /// auto-decline a second incoming offer while already on a call.
 final activeCallConversationIdProvider = StateProvider<String?>((ref) => null);
+
+/// Conversation the user currently has open, so incoming messages for it
+/// don't fire a notification they're already reading.
+final activeChatConversationIdProvider = StateProvider<String?>((ref) => null);

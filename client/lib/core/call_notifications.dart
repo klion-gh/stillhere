@@ -69,4 +69,44 @@ class CallNotifications {
       AppLogger.error(_tag, 'cancelIncomingCall failed', e, st);
     }
   }
+
+  static const AndroidNotificationDetails _messageDetails = AndroidNotificationDetails(
+    'messages',
+    'Сообщения',
+    channelDescription: 'Уведомления о новых сообщениях',
+    importance: Importance.high,
+    priority: Priority.high,
+    category: AndroidNotificationCategory.message,
+    playSound: true,
+    enableVibration: true,
+  );
+
+  /// One notification per conversation, so a busy chat replaces its own
+  /// entry instead of stacking up a wall of them.
+  static Future<void> showMessage({
+    required String conversationId,
+    required String senderUsername,
+    required String preview,
+  }) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _plugin.show(
+        conversationId.hashCode & 0x7FFFFFFF,
+        '@$senderUsername',
+        preview,
+        const NotificationDetails(android: _messageDetails),
+      );
+    } catch (e, st) {
+      AppLogger.error(_tag, 'showMessage failed', e, st);
+    }
+  }
+
+  static Future<void> cancelMessages(String conversationId) async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _plugin.cancel(conversationId.hashCode & 0x7FFFFFFF);
+    } catch (e, st) {
+      AppLogger.error(_tag, 'cancelMessages failed', e, st);
+    }
+  }
 }

@@ -30,6 +30,13 @@ class CallUiState {
   final String? selectedInputDeviceId;
   final Duration elapsed;
 
+  /// True while ICE has dropped mid-call and is trying to re-establish.
+  final bool reconnecting;
+
+  /// Latency to the node, ours and (as reported by them) the peer's.
+  final int? ownRttMs;
+  final int? peerRttMs;
+
   const CallUiState({
     required this.phase,
     this.error,
@@ -38,6 +45,9 @@ class CallUiState {
     this.inputDevices = const [],
     this.selectedInputDeviceId,
     this.elapsed = Duration.zero,
+    this.reconnecting = false,
+    this.ownRttMs,
+    this.peerRttMs,
   });
 
   CallUiState copyWith({
@@ -48,6 +58,9 @@ class CallUiState {
     List<AudioInputDevice>? inputDevices,
     String? selectedInputDeviceId,
     Duration? elapsed,
+    bool? reconnecting,
+    int? ownRttMs,
+    int? peerRttMs,
   }) {
     return CallUiState(
       phase: phase ?? this.phase,
@@ -57,6 +70,9 @@ class CallUiState {
       inputDevices: inputDevices ?? this.inputDevices,
       selectedInputDeviceId: selectedInputDeviceId ?? this.selectedInputDeviceId,
       elapsed: elapsed ?? this.elapsed,
+      reconnecting: reconnecting ?? this.reconnecting,
+      ownRttMs: ownRttMs ?? this.ownRttMs,
+      peerRttMs: peerRttMs ?? this.peerRttMs,
     );
   }
 }
@@ -128,6 +144,7 @@ class CallController extends StateNotifier<CallUiState> {
   bool _remoteDescriptionSet = false;
   Map<String, dynamic>? _pendingOfferSdp;
   Timer? _elapsedTimer;
+  Timer? _statsTimer;
 
   Future<List<Map<String, dynamic>>> _fetchIceServers() async {
     final dio = _ref.read(apiClientProvider);
@@ -145,6 +162,24 @@ class CallController extends StateNotifier<CallUiState> {
     _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       state = state.copyWith(elapsed: state.elapsed + const Duration(seconds: 1));
+    });
+    _startStatsExchange();
+  }
+
+  /// Publishes our latency to the node so the other side can display it,
+  /// and picks up whatever the WS client last measured for ourselves.
+  void _startStatsExchange() {
+    _statsTimer?.cancel();
+    _statsTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!mounted) return;
+      final rtt = _ref.read(wsClientProvider).lastRttMs;
+      if (rtt == null) return;
+      state = state.copyWith(ownRttMs: rtt);
+      _ref.read(wsClientProvider).send({
+        'type': 'call:stats',
+        'conversationId': args.conversationId,
+        'rttMs': rtt,
+      });
     });
   }
 
@@ -174,9 +209,15 @@ class CallController extends StateNotifier<CallUiState> {
       AppLogger.info(_tag, 'peer connection state: $connState');
       if (connState == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
         unawaited(_stopRingtone());
-        if (mounted && state.phase != CallPhase.active) {
-          state = state.copyWith(phase: CallPhase.active);
+        if (!mounted) return;
+        if (state.phase != CallPhase.active) {
+          state = state.copyWith(phase: CallPhase.active, reconnecting: false);
           _startElapsedTimer();
+          // Audio routing only sticks once the session is actually running,
+          // which is why setting it earlier could silently do nothing.
+          unawaited(_applyAudioRouting());
+        } else {
+          state = state.copyWith(reconnecting: false);
         }
       } else if (connState == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
         unawaited(_stopRingtone());
@@ -186,6 +227,14 @@ class CallController extends StateNotifier<CallUiState> {
 
     pc.onIceConnectionState = (iceState) {
       AppLogger.info(_tag, 'ICE connection state: $iceState');
+      if (!mounted) return;
+      // A mid-call ICE drop usually recovers on its own; show it rather than
+      // leaving the user wondering why the other side went quiet.
+      final dropped = iceState == RTCIceConnectionState.RTCIceConnectionStateDisconnected ||
+          iceState == RTCIceConnectionState.RTCIceConnectionStateChecking;
+      if (state.phase == CallPhase.active) {
+        state = state.copyWith(reconnecting: dropped);
+      }
     };
 
     _localStream = await navigator.mediaDevices.getUserMedia({'audio': true, 'video': false});
@@ -195,6 +244,20 @@ class CallController extends StateNotifier<CallUiState> {
     }
 
     unawaited(_loadInputDevices());
+  }
+
+  /// Pushes the current speaker choice down to the platform. Android's audio
+  /// manager quietly ignores routing changes made before the call's audio
+  /// session is live, so this is re-applied on connect as well as on toggle
+  /// — that mismatch is why the button used to need several presses.
+  Future<void> _applyAudioRouting() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await Helper.setSpeakerphoneOn(state.speakerOn);
+      AppLogger.info(_tag, 'audio routing applied (speaker=${state.speakerOn})');
+    } catch (e, st) {
+      AppLogger.error(_tag, 'failed to apply audio routing', e, st);
+    }
   }
 
   /// Enumerates microphones so the desktop UI can offer a picker. Only
@@ -295,13 +358,11 @@ class CallController extends StateNotifier<CallUiState> {
   Future<void> toggleSpeaker() async {
     if (!Platform.isAndroid) return;
     final newSpeakerOn = !state.speakerOn;
-    try {
-      await Helper.setSpeakerphoneOn(newSpeakerOn);
-      AppLogger.info(_tag, 'speakerphone ${newSpeakerOn ? 'on' : 'off'}');
-      if (mounted) state = state.copyWith(speakerOn: newSpeakerOn);
-    } catch (e, st) {
-      AppLogger.error(_tag, 'failed to toggle speakerphone', e, st);
-    }
+    // Record the intent first, then apply it — so if the platform call is a
+    // no-op because the audio session isn't ready yet, _applyAudioRouting
+    // will replay the same intent once the call connects.
+    if (mounted) state = state.copyWith(speakerOn: newSpeakerOn);
+    await _applyAudioRouting();
   }
 
   /// Desktop-focused: switches which microphone feeds the call.
@@ -339,6 +400,12 @@ class CallController extends StateNotifier<CallUiState> {
         AppLogger.info(_tag, 'peer ended call ${args.conversationId}');
         unawaited(_stopRingtone());
         if (mounted) state = state.copyWith(phase: CallPhase.ended);
+        break;
+      case 'call:stats':
+        final peerRtt = event['rttMs'];
+        if (peerRtt is int && mounted) {
+          state = state.copyWith(peerRttMs: peerRtt);
+        }
         break;
       case 'call:unavailable':
         AppLogger.warn(_tag, 'peer unreachable for ${args.conversationId}');
@@ -390,6 +457,7 @@ class CallController extends StateNotifier<CallUiState> {
   Future<void> disposeCall() async {
     AppLogger.info(_tag, 'disposing call controller for ${args.conversationId}');
     _elapsedTimer?.cancel();
+    _statsTimer?.cancel();
     await _stopRingtone();
     await _wsSub?.cancel();
     for (final track in _localStream?.getTracks() ?? <MediaStreamTrack>[]) {

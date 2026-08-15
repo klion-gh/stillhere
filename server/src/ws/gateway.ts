@@ -12,6 +12,13 @@ const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("call:answer"), conversationId: z.string(), sdp: z.unknown() }),
   z.object({ type: z.literal("call:ice-candidate"), conversationId: z.string(), candidate: z.unknown() }),
   z.object({ type: z.literal("call:end"), conversationId: z.string() }),
+  // Application-level round trip so the client can show its latency to the
+  // node. (The protocol-level ping/pong used by the heartbeat isn't exposed
+  // to application code on either end.)
+  z.object({ type: z.literal("net:ping"), sentAt: z.number() }),
+  // A peer's measured latency, forwarded so both sides of a call can show
+  // each other's connection quality.
+  z.object({ type: z.literal("call:stats"), conversationId: z.string(), rttMs: z.number().int().min(0).max(60000) }),
 ]);
 
 async function getPeerId(conversationId: string, userId: string): Promise<string | null> {
@@ -60,9 +67,11 @@ export async function wsGateway(app: FastifyInstance) {
     }
 
     let userId: string;
+    let username: string;
     try {
       const payload = verifyAccessToken(token);
       userId = payload.sub;
+      username = payload.username;
     } catch {
       log.warn({ ip: request.ip }, "ws: rejected, invalid user token");
       socket.close(4001, "invalid_token");
@@ -90,6 +99,12 @@ export async function wsGateway(app: FastifyInstance) {
         }
         const msg = parsed.data;
 
+        // Latency probe: echoed straight back, no conversation involved.
+        if (msg.type === "net:ping") {
+          sendToUser(userId, { type: "net:pong", sentAt: msg.sentAt });
+          return;
+        }
+
         const peerId = await getPeerId(msg.conversationId, userId);
         if (!peerId) {
           log.warn({ userId, conversationId: msg.conversationId, type: msg.type }, "ws: dropped, no such conversation for sender");
@@ -100,9 +115,12 @@ export async function wsGateway(app: FastifyInstance) {
           let saved = await prisma.message.create({
             data: { conversationId: msg.conversationId, senderId: userId, content: msg.content },
           });
+          // The sender's tag rides along so the recipient can render a
+          // notification without first resolving the conversation.
           const delivered = sendToUser(peerId, {
             type: "message:new",
             message: saved,
+            senderUsername: username,
             clientId: msg.clientId,
           });
           log.info({ userId, peerId, conversationId: msg.conversationId, delivered }, "ws: message relayed");
@@ -113,9 +131,13 @@ export async function wsGateway(app: FastifyInstance) {
           return;
         }
 
-        // WebRTC signaling: pure relay, no persistence.
+        // WebRTC signaling and call telemetry: pure relay, no persistence.
         const delivered = sendToUser(peerId, { ...msg, from: userId });
-        log.info({ userId, peerId, conversationId: msg.conversationId, type: msg.type, delivered }, "ws: call signal relayed");
+        // call:stats repeats every couple of seconds for the whole call —
+        // logging it at info level would drown out everything else.
+        if (msg.type !== "call:stats") {
+          log.info({ userId, peerId, conversationId: msg.conversationId, type: msg.type, delivered }, "ws: call signal relayed");
+        }
 
         // Tell the caller immediately instead of letting them listen to a
         // ringback for a peer who was never reachable.

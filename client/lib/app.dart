@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/call_notifications.dart';
+import 'core/connection_service.dart';
 import 'core/incoming_call.dart';
 import 'core/providers.dart';
 import 'core/router.dart';
@@ -19,21 +20,42 @@ class StillHereApp extends ConsumerStatefulWidget {
   ConsumerState<StillHereApp> createState() => _StillHereAppState();
 }
 
-class _StillHereAppState extends ConsumerState<StillHereApp> {
-  StreamSubscription<Map<String, dynamic>>? _callSignalSub;
+class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBindingObserver {
+  StreamSubscription<Map<String, dynamic>>? _wsSub;
+  bool _inForeground = true;
 
   @override
   void initState() {
     super.initState();
-    // Global listener: an incoming call can arrive while the user is
-    // anywhere in the app (conversation list, a different chat, etc.), not
-    // just while a ChatScreen/CallScreen happens to be mounted.
-    _callSignalSub = ref.read(wsClientProvider).events.listen(_handleIncomingSignal);
+    WidgetsBinding.instance.addObserver(this);
+    // Global listener: incoming calls and messages can arrive while the user
+    // is anywhere in the app — or nowhere, with it backgrounded.
+    _wsSub = ref.read(wsClientProvider).events.listen(_handleWsEvent);
   }
 
-  void _handleIncomingSignal(Map<String, dynamic> event) {
-    if (event['type'] != 'call:offer') return;
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _inForeground = state == AppLifecycleState.resumed;
+  }
 
+  void _handleWsEvent(Map<String, dynamic> event) {
+    switch (event['type']) {
+      case 'call:offer':
+        _handleIncomingCall(event);
+        break;
+      case 'message:new':
+        _handleIncomingMessage(event);
+        break;
+      case 'conversation:new':
+        // Someone started a conversation with us. Pull it into the list so
+        // their messages and calls have somewhere to land, even though we
+        // never added them.
+        unawaited(ref.read(conversationsProvider.notifier).refresh());
+        break;
+    }
+  }
+
+  void _handleIncomingCall(Map<String, dynamic> event) {
     final conversationId = event['conversationId'] as String?;
     final sdp = event['sdp'] as Map<String, dynamic>?;
     final fromUserId = event['from'] as String?;
@@ -51,11 +73,43 @@ class _StillHereAppState extends ConsumerState<StillHereApp> {
       sdp: sdp,
     );
 
-    final peerUsername = _resolvePeerUsername(conversationId) ?? '';
+    final known = _resolvePeerUsername(conversationId);
+    final peerUsername = known ?? '';
+    if (known == null) {
+      // A call from someone whose conversation we haven't loaded yet — fetch
+      // it so the call screen can show who's calling.
+      unawaited(ref.read(conversationsProvider.notifier).refresh());
+    }
+
     // Heads-up notification so the call is visible even if the app is
     // backgrounded (the ringtone itself is started by CallController).
     unawaited(CallNotifications.showIncomingCall(peerUsername));
     ref.read(routerProvider).push('/call/$conversationId?peer=$peerUsername&outgoing=false');
+  }
+
+  void _handleIncomingMessage(Map<String, dynamic> event) {
+    final message = event['message'] as Map<String, dynamic>?;
+    if (message == null) return;
+    final conversationId = message['conversationId'] as String?;
+    if (conversationId == null) return;
+
+    final senderUsername =
+        (event['senderUsername'] as String?) ?? _resolvePeerUsername(conversationId) ?? 'Сообщение';
+
+    if (_resolvePeerUsername(conversationId) == null) {
+      // First message from someone who added us — surface the conversation.
+      unawaited(ref.read(conversationsProvider.notifier).refresh());
+    }
+
+    // Don't buzz for a chat the user is already looking at.
+    final viewing = ref.read(activeChatConversationIdProvider);
+    if (_inForeground && viewing == conversationId) return;
+
+    unawaited(CallNotifications.showMessage(
+      conversationId: conversationId,
+      senderUsername: senderUsername,
+      preview: (message['content'] as String?) ?? '',
+    ));
   }
 
   String? _resolvePeerUsername(String conversationId) {
@@ -69,7 +123,8 @@ class _StillHereAppState extends ConsumerState<StillHereApp> {
 
   @override
   void dispose() {
-    _callSignalSub?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _wsSub?.cancel();
     super.dispose();
   }
 
@@ -95,16 +150,25 @@ class _StillHereAppState extends ConsumerState<StillHereApp> {
       if (isAuthenticated && userToken != null && !wasAuthenticated) {
         final node = ref.read(nodeControllerProvider).valueOrNull;
         if (node != null && node.host != null && node.nodeToken != null) {
+          unawaited(ConnectionService.start());
           ref.read(wsClientProvider).connect(
                 host: node.host!,
                 nodeToken: node.nodeToken!,
                 userToken: userToken,
                 pinnedFingerprint: node.pinnedFingerprint,
                 onFirstPin: (fp) => ref.read(nodeControllerProvider.notifier).recordPinnedFingerprint(fp),
+                // Access tokens expire well within a session; let the socket
+                // renew rather than staying locked out until the next login.
+                refreshAccessToken: () async {
+                  final ok = await ref.read(authControllerProvider.notifier).tryRefresh();
+                  if (!ok) return null;
+                  return ref.read(authControllerProvider).valueOrNull?.accessToken;
+                },
               );
         }
       } else if (!isAuthenticated && wasAuthenticated) {
         ref.read(wsClientProvider).disconnect();
+        unawaited(ConnectionService.stop());
       }
     });
 
