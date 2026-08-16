@@ -63,7 +63,9 @@ fetch_repo() {
 # script text instead of waiting for the user — silently returning empty,
 # and sending the password loop below spinning forever.
 require_tty() {
-  if [ ! -r /dev/tty ]; then
+  # /dev/tty passes a -r test even with no controlling terminal — the device
+  # node exists, opening it is what fails. Actually try to open it.
+  if ! { : < /dev/tty; } 2>/dev/null; then
     die "Нужен терминал для ввода. Скачайте установщик и запустите его отдельно:
   curl -fsSL $RAW_URL -o install.sh && sudo bash install.sh
 Либо задайте всё переменными окружения (STILLHERE_NODE_PASSWORD, STILLHERE_DOMAIN, ...)."
