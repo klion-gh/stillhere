@@ -36,6 +36,7 @@ class ConversationsListScreen extends ConsumerWidget {
                 onUpdateTap: updateInfo == null ? null : () => UpdateDialog.show(context, updateInfo),
                 onLogout: () => ref.read(authControllerProvider.notifier).logout(),
                 onSwitchServer: () => ref.read(nodeControllerProvider.notifier).disconnect(),
+                onAppearance: () => context.push('/appearance'),
               ),
               if (!wsConnected) const _OfflineBanner(),
               Expanded(
@@ -54,7 +55,7 @@ class ConversationsListScreen extends ConsumerWidget {
                             child: Text(
                               'Не удалось загрузить чаты.\n$err',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(color: AppColors.textSecondary, height: 1.5),
+                              style: TextStyle(color: AppColors.textSecondary, height: 1.5),
                             ),
                           ),
                         ),
@@ -101,6 +102,7 @@ class _Header extends StatelessWidget {
   final VoidCallback? onUpdateTap;
   final VoidCallback onLogout;
   final VoidCallback onSwitchServer;
+  final VoidCallback onAppearance;
 
   const _Header({
     required this.username,
@@ -108,6 +110,7 @@ class _Header extends StatelessWidget {
     required this.onUpdateTap,
     required this.onLogout,
     required this.onSwitchServer,
+    required this.onAppearance,
   });
 
   @override
@@ -123,7 +126,7 @@ class _Header extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
+                Text(
                   'Чаты',
                   style: TextStyle(
                     fontSize: 24,
@@ -135,7 +138,7 @@ class _Header extends StatelessWidget {
                 if (username != null)
                   Text(
                     '@$username',
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                   ),
               ],
             ),
@@ -147,7 +150,7 @@ class _Header extends StatelessWidget {
               icon: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  const Icon(Icons.system_update_rounded, color: AppColors.primary),
+                  Icon(Icons.system_update_rounded, color: AppColors.primary),
                   Positioned(
                     right: -1,
                     top: -1,
@@ -179,9 +182,20 @@ class _Header extends StatelessWidget {
                   case 'toggle_notifications':
                     DesktopShell.instance.setNotificationsEnabled(!notificationsOn);
                     break;
+                  case 'appearance':
+                    onAppearance();
+                    break;
                 }
               },
               itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'appearance',
+                  child: Row(children: [
+                    Icon(Icons.palette_outlined, size: 19),
+                    SizedBox(width: 12),
+                    Text('Оформление'),
+                  ]),
+                ),
                 if (DesktopShell.isSupported)
                   PopupMenuItem(
                     value: 'toggle_notifications',
@@ -298,7 +312,7 @@ class _ConversationTile extends StatelessWidget {
                     children: [
                       Text(
                         '@$username',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                           color: AppColors.textPrimary,
@@ -307,7 +321,7 @@ class _ConversationTile extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         subtitle,
-                        style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5),
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
                       ),
                     ],
                   ),
@@ -349,10 +363,10 @@ class _EmptyState extends StatelessWidget {
                   shape: BoxShape.circle,
                   border: Border.all(color: AppColors.surfaceOutline),
                 ),
-                child: const Icon(Icons.forum_outlined, size: 42, color: AppColors.textMuted),
+                child: Icon(Icons.forum_outlined, size: 42, color: AppColors.textMuted),
               ),
               const SizedBox(height: 24),
-              const Text(
+              Text(
                 'Пока пусто',
                 style: TextStyle(
                   fontSize: 20,
@@ -361,8 +375,8 @@ class _EmptyState extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 48),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 48),
                 child: Text(
                   'Найдите друга по @тегу и начните разговор.',
                   textAlign: TextAlign.center,

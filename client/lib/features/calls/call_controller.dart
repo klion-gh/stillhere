@@ -96,6 +96,16 @@ class CallArgs {
   int get hashCode => Object.hash(conversationId, peerUsername, isOutgoing);
 }
 
+/// The exact arguments of the call currently on screen.
+///
+/// callControllerProvider is a family keyed by CallArgs, so reaching the
+/// live controller requires an argument object that compares equal to the
+/// one the screen used. Rebuilding it from notification payload data is
+/// fragile — a peer name that differs by a character silently spins up a
+/// second controller with no pending offer. Notification actions read this
+/// instead.
+final activeCallArgsProvider = StateProvider<CallArgs?>((ref) => null);
+
 final callControllerProvider =
     StateNotifierProvider.autoDispose.family<CallController, CallUiState, CallArgs>((ref, args) {
   final controller = CallController(ref, args);
@@ -115,6 +125,7 @@ class CallController extends StateNotifier<CallUiState> {
     Future.microtask(() {
       if (mounted) {
         _ref.read(activeCallConversationIdProvider.notifier).state = args.conversationId;
+        _ref.read(activeCallArgsProvider.notifier).state = args;
       }
     });
 
@@ -468,6 +479,7 @@ class CallController extends StateNotifier<CallUiState> {
     await _pc?.close();
     if (_ref.read(activeCallConversationIdProvider) == args.conversationId) {
       _ref.read(activeCallConversationIdProvider.notifier).state = null;
+      _ref.read(activeCallArgsProvider.notifier).state = null;
     }
   }
 }

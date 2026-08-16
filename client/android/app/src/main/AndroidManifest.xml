@@ -16,6 +16,10 @@
          for in-app updates. This only grants the right to ask; the user
          still approves "install from this source" once. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Lets the app ask to be exempted from battery optimisation. Without
+         it OEM battery managers freeze the process and background calls
+         only arrive intermittently. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <application
         android:label="StillHere"
         android:name="${applicationName}"

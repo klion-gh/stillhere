@@ -141,7 +141,7 @@ class _Content extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               '${(progress.fraction * 100).toStringAsFixed(0)}%',
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
             ),
           ],
         );
@@ -173,7 +173,7 @@ class _Content extends StatelessWidget {
             Text('Новая версия: ${info.latest.version}\nУ вас: ${info.currentVersion}'),
             if (Platform.isAndroid) ...[
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'Android попросит разрешить установку из этого источника — это нужно один раз.',
                 style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.4),
               ),

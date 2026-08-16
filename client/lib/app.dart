@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/appearance.dart';
 import 'core/call_notifications.dart';
 import 'core/connection_service.dart';
 import 'core/desktop_notifications.dart';
@@ -35,9 +36,9 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
     _wsSub = ref.read(wsClientProvider).events.listen(_handleWsEvent);
     CallNotifications.onCallAction = _handleCallNotificationAction;
 
-    DesktopNotifications.onCallAction = (conversationId, peerUsername, accept) {
+    DesktopNotifications.onCallAction = (conversationId, peerUsername, action) {
       _handleCallNotificationAction(CallNotificationEvent(
-        action: accept ? CallNotificationAction.accept : CallNotificationAction.open,
+        action: action,
         conversationId: conversationId,
         peerUsername: peerUsername,
       ));
@@ -47,45 +48,56 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
     };
   }
 
-  /// Accept/decline tapped on the Android call notification, or the
-  /// notification body itself (which should land on the call screen).
+  /// Accept/decline tapped on a call notification, or the notification body
+  /// itself (which should land on the call screen).
   void _handleCallNotificationAction(CallNotificationEvent event) {
     if (event.conversationId.isEmpty) return;
 
-    if (event.action == CallNotificationAction.decline) {
-      ref.read(wsClientProvider).send({
-        'type': 'call:end',
-        'conversationId': event.conversationId,
-      });
-      ref.read(pendingIncomingCallProvider.notifier).state = null;
-      unawaited(CallNotifications.cancelIncomingCall());
-      return;
-    }
+    final liveArgs = ref.read(activeCallArgsProvider);
+    final isLive = liveArgs != null && liveArgs.conversationId == event.conversationId;
 
-    final location = '/call/${event.conversationId}?peer=${event.peerUsername}&outgoing=false';
-    // The call screen may already be open (the app routes there as soon as
-    // the offer arrives); pushing a second copy would stack two controllers
-    // on the same call.
-    if (ref.read(activeCallConversationIdProvider) == event.conversationId) {
-      if (event.action == CallNotificationAction.accept) {
-        _acceptActiveCall(event);
-      }
-      return;
-    }
-    ref.read(routerProvider).push(location);
-    if (event.action == CallNotificationAction.accept) {
-      // Give the screen a frame to build its controller before answering.
-      Future.delayed(const Duration(milliseconds: 350), () => _acceptActiveCall(event));
+    switch (event.action) {
+      case CallNotificationAction.decline:
+        if (isLive) {
+          // Goes through the controller so the ringtone stops and the screen
+          // moves to its ended state, not just a bare call:end on the wire.
+          ref.read(callControllerProvider(liveArgs).notifier).declineIncomingCall();
+        } else {
+          ref.read(wsClientProvider).send({
+            'type': 'call:end',
+            'conversationId': event.conversationId,
+          });
+          ref.read(pendingIncomingCallProvider.notifier).state = null;
+        }
+        unawaited(CallNotifications.cancelIncomingCall());
+        unawaited(DesktopNotifications.cancelIncomingCall());
+        break;
+
+      case CallNotificationAction.accept:
+        if (isLive) {
+          unawaited(ref.read(callControllerProvider(liveArgs).notifier).acceptIncomingCall());
+        } else {
+          // No controller yet (notification arrived before the screen); open
+          // it, then answer once it has built.
+          _openCallScreen(event);
+          Future.delayed(const Duration(milliseconds: 400), () {
+            final args = ref.read(activeCallArgsProvider);
+            if (args == null || args.conversationId != event.conversationId) return;
+            unawaited(ref.read(callControllerProvider(args).notifier).acceptIncomingCall());
+          });
+        }
+        break;
+
+      case CallNotificationAction.open:
+        if (!isLive) _openCallScreen(event);
+        break;
     }
   }
 
-  void _acceptActiveCall(CallNotificationEvent event) {
-    final args = CallArgs(
-      conversationId: event.conversationId,
-      peerUsername: event.peerUsername,
-      isOutgoing: false,
-    );
-    unawaited(ref.read(callControllerProvider(args).notifier).acceptIncomingCall());
+  void _openCallScreen(CallNotificationEvent event) {
+    ref.read(routerProvider).push(
+          '/call/${event.conversationId}?peer=${event.peerUsername}&outgoing=false',
+        );
   }
 
   @override
@@ -241,12 +253,16 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
     });
 
     final router = ref.watch(routerProvider);
+    // Rebuilds the whole theme (and repaints every screen reading AppColors)
+    // when the user picks a different palette.
+    final palette = ref.watch(appearanceProvider).palette;
+    final theme = buildAppTheme(palette);
 
     return MaterialApp.router(
       title: 'StillHere',
       debugShowCheckedModeBanner: false,
-      theme: buildAppTheme(),
-      darkTheme: buildAppTheme(),
+      theme: theme,
+      darkTheme: theme,
       themeMode: ThemeMode.dark,
       routerConfig: router,
     );

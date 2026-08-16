@@ -66,7 +66,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       body: NightBackdrop(
         child: Stack(
           children: [
-            const Positioned(bottom: -80, right: -70, child: GlowOrb(color: AppColors.accent, size: 320, opacity: 0.12)),
+            Positioned(bottom: -80, right: -70, child: GlowOrb(color: AppColors.accent, size: 320, opacity: 0.12)),
             SafeArea(
               child: Center(
                 child: SingleChildScrollView(
@@ -96,7 +96,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                           Text(
                             typedTag.isEmpty ? 'Выберите свой тег' : '@$typedTag',
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.w700,
                               letterSpacing: -0.5,
@@ -104,7 +104,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
+                          Text(
                             'По этому тегу друзья найдут вас на этом узле.',
                             textAlign: TextAlign.center,
                             style: TextStyle(color: AppColors.textSecondary, fontSize: 14, height: 1.5),
@@ -135,7 +135,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             decoration: InputDecoration(
                               labelText: 'Пароль',
                               helperText: 'Минимум 8 символов',
-                              helperStyle: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                              helperStyle: TextStyle(color: AppColors.textMuted, fontSize: 12),
                               prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
                               suffixIcon: IconButton(
                                 icon: Icon(

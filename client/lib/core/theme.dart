@@ -1,37 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// StillHere's visual identity: a deep indigo-to-violet night palette with
-/// a warm coral accent for calls. Dark-first — the app is meant to feel
-/// like a quiet, private room.
-class AppColors {
-  static const Color background = Color(0xFF0E0B18);
-  static const Color surface = Color(0xFF171327);
-  static const Color surfaceHigh = Color(0xFF211C36);
-  static const Color surfaceOutline = Color(0xFF2E2748);
+import 'appearance.dart';
 
-  static const Color primary = Color(0xFF8B7CF6);
-  static const Color primaryDeep = Color(0xFF6D5AE0);
-  static const Color accent = Color(0xFF4ECDC4);
+/// StillHere's visual identity. Dark-first — the app is meant to feel like a
+/// quiet, private room.
+///
+/// These are deliberately mutable statics rather than constants: the user can
+/// switch palettes at runtime, and every screen reads its colours from here.
+/// [apply] is called before the app rebuilds with a new palette.
+class AppColors {
+  static Color background = AppPalette.midnight.background;
+  static Color surface = AppPalette.midnight.surface;
+  static Color surfaceHigh = AppPalette.midnight.surfaceHigh;
+  static Color surfaceOutline = AppPalette.midnight.surfaceOutline;
+
+  static Color primary = AppPalette.midnight.primary;
+  static Color primaryDeep = AppPalette.midnight.primaryDeep;
+  static Color accent = AppPalette.midnight.accent;
+
+  // Semantic, not decorative — a failure is red and a success is green in
+  // every palette, so these stay fixed.
   static const Color danger = Color(0xFFFF5C7A);
   static const Color success = Color(0xFF4ADE80);
 
-  static const Color textPrimary = Color(0xFFF2EFFA);
-  static const Color textSecondary = Color(0xFF9C93B8);
-  static const Color textMuted = Color(0xFF6B6385);
+  static Color textPrimary = AppPalette.midnight.textPrimary;
+  static Color textSecondary = AppPalette.midnight.textSecondary;
+  static Color textMuted = AppPalette.midnight.textMuted;
 
   /// Backdrop gradient used on the auth/connect/call screens.
-  static const LinearGradient nightGradient = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFF15102A), Color(0xFF0E0B18), Color(0xFF130E24)],
-  );
+  static LinearGradient nightGradient = AppPalette.midnight.backdropGradient;
 
-  static const LinearGradient brandGradient = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFF8B7CF6), Color(0xFF5B8DEF)],
-  );
+  static LinearGradient brandGradient = AppPalette.midnight.brandGradient;
+
+  static void apply(AppPalette palette) {
+    background = palette.background;
+    surface = palette.surface;
+    surfaceHigh = palette.surfaceHigh;
+    surfaceOutline = palette.surfaceOutline;
+    primary = palette.primary;
+    primaryDeep = palette.primaryDeep;
+    accent = palette.accent;
+    textPrimary = palette.textPrimary;
+    textSecondary = palette.textSecondary;
+    textMuted = palette.textMuted;
+    nightGradient = palette.backdropGradient;
+    brandGradient = palette.brandGradient;
+  }
 
   /// Deterministic per-user avatar gradient — same tag always gets the same
   /// colors, so people become recognizable by color at a glance.
@@ -59,14 +74,16 @@ class AppColors {
   }
 }
 
-ThemeData buildAppTheme() {
-  const colorScheme = ColorScheme.dark(
+ThemeData buildAppTheme([AppPalette? palette]) {
+  if (palette != null) AppColors.apply(palette);
+
+  final colorScheme = ColorScheme.dark(
     primary: AppColors.primary,
     onPrimary: Colors.white,
     primaryContainer: AppColors.primaryDeep,
     onPrimaryContainer: Colors.white,
     secondary: AppColors.accent,
-    onSecondary: Color(0xFF06231F),
+    onSecondary: const Color(0xFF06231F),
     surface: AppColors.surface,
     onSurface: AppColors.textPrimary,
     surfaceContainerHighest: AppColors.surfaceHigh,
@@ -84,7 +101,7 @@ ThemeData buildAppTheme() {
   );
 
   return base.copyWith(
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
@@ -96,7 +113,7 @@ ThemeData buildAppTheme() {
         letterSpacing: -0.2,
       ),
       iconTheme: IconThemeData(color: AppColors.textSecondary),
-      systemOverlayStyle: SystemUiOverlayStyle(
+      systemOverlayStyle: const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.light,
       ),
@@ -109,20 +126,20 @@ ThemeData buildAppTheme() {
       filled: true,
       fillColor: AppColors.surfaceHigh,
       contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-      hintStyle: const TextStyle(color: AppColors.textMuted),
-      labelStyle: const TextStyle(color: AppColors.textSecondary),
-      prefixStyle: const TextStyle(color: AppColors.textSecondary),
+      hintStyle: TextStyle(color: AppColors.textMuted),
+      labelStyle: TextStyle(color: AppColors.textSecondary),
+      prefixStyle: TextStyle(color: AppColors.textSecondary),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
         borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: AppColors.surfaceOutline, width: 1),
+        borderSide: BorderSide(color: AppColors.surfaceOutline, width: 1),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: AppColors.primary, width: 1.6),
+        borderSide: BorderSide(color: AppColors.primary, width: 1.6),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
@@ -154,28 +171,28 @@ ThemeData buildAppTheme() {
       backgroundColor: AppColors.surfaceHigh,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      titleTextStyle: const TextStyle(
+      titleTextStyle: TextStyle(
         color: AppColors.textPrimary,
         fontSize: 19,
         fontWeight: FontWeight.w600,
       ),
-      contentTextStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 15, height: 1.5),
+      contentTextStyle: TextStyle(color: AppColors.textSecondary, fontSize: 15, height: 1.5),
     ),
     popupMenuTheme: PopupMenuThemeData(
       color: AppColors.surfaceHigh,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      textStyle: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+      textStyle: TextStyle(color: AppColors.textPrimary, fontSize: 15),
     ),
-    dividerTheme: const DividerThemeData(color: AppColors.surfaceOutline, thickness: 1, space: 1),
+    dividerTheme: DividerThemeData(color: AppColors.surfaceOutline, thickness: 1, space: 1),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.surfaceHigh,
-      contentTextStyle: const TextStyle(color: AppColors.textPrimary),
+      contentTextStyle: TextStyle(color: AppColors.textPrimary),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       behavior: SnackBarBehavior.floating,
     ),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(color: AppColors.primary),
-    listTileTheme: const ListTileThemeData(
+    progressIndicatorTheme: ProgressIndicatorThemeData(color: AppColors.primary),
+    listTileTheme: ListTileThemeData(
       iconColor: AppColors.textSecondary,
       textColor: AppColors.textPrimary,
     ),

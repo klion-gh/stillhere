@@ -115,7 +115,7 @@ class _FoundCard extends StatelessWidget {
           const SizedBox(height: 18),
           Text(
             '@${user.username}',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
@@ -149,15 +149,15 @@ class _NotFound extends StatelessWidget {
             shape: BoxShape.circle,
             border: Border.all(color: AppColors.surfaceOutline),
           ),
-          child: const Icon(Icons.person_off_outlined, size: 34, color: AppColors.textMuted),
+          child: Icon(Icons.person_off_outlined, size: 34, color: AppColors.textMuted),
         ),
         const SizedBox(height: 18),
-        const Text(
+        Text(
           'Пользователь не найден',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'Проверьте тег — он должен быть точным.',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
         ),

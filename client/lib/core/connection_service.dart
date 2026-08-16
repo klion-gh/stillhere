@@ -48,6 +48,24 @@ class ConnectionService {
     );
   }
 
+  /// Asks Android to exempt the app from battery optimisation.
+  ///
+  /// A foreground service alone isn't enough on most real phones: Doze and
+  /// especially OEM battery managers (Xiaomi, Samsung, Huawei…) still freeze
+  /// or kill the process, which is what makes background delivery work only
+  /// some of the time. The user has to grant this themselves; we can only
+  /// bring up the dialog, and only once — repeatedly nagging is worse than
+  /// the problem.
+  static Future<void> ensureBatteryExemption() async {
+    if (!Platform.isAndroid) return;
+    try {
+      if (await FlutterForegroundTask.isIgnoringBatteryOptimizations) return;
+      await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+    } catch (e, st) {
+      AppLogger.error(_tag, 'battery optimisation request failed', e, st);
+    }
+  }
+
   static Future<void> start() async {
     if (!Platform.isAndroid || _started) return;
     try {
@@ -55,6 +73,7 @@ class ConnectionService {
       if (permission != NotificationPermission.granted) {
         await FlutterForegroundTask.requestNotificationPermission();
       }
+      await ensureBatteryExemption();
 
       if (await FlutterForegroundTask.isRunningService) {
         _started = true;

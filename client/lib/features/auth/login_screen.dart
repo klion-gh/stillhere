@@ -56,7 +56,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       body: NightBackdrop(
         child: Stack(
           children: [
-            const Positioned(top: -80, left: -70, child: GlowOrb(color: AppColors.primary, size: 320)),
+            Positioned(top: -80, left: -70, child: GlowOrb(color: AppColors.primary, size: 320)),
             SafeArea(
               child: Center(
                 child: SingleChildScrollView(
@@ -71,7 +71,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         children: [
                           const BrandMark(size: 72),
                           const SizedBox(height: 24),
-                          const Text(
+                          Text(
                             'С возвращением',
                             textAlign: TextAlign.center,
                             style: TextStyle(
@@ -134,7 +134,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           const SizedBox(height: 8),
                           TextButton(
                             onPressed: _submitting ? null : () => context.push('/register'),
-                            child: const Text.rich(
+                            child: Text.rich(
                               TextSpan(
                                 text: 'Нет аккаунта? ',
                                 children: [
@@ -186,7 +186,7 @@ class _NodeChip extends StatelessWidget {
             const SizedBox(width: 9),
             Text(
               host,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
           ],
         ),

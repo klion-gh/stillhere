@@ -52,8 +52,8 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
       body: NightBackdrop(
         child: Stack(
           children: [
-            const Positioned(top: -60, right: -80, child: GlowOrb(color: AppColors.primary, size: 340)),
-            const Positioned(bottom: -100, left: -60, child: GlowOrb(color: AppColors.accent, size: 300, opacity: 0.1)),
+            Positioned(top: -60, right: -80, child: GlowOrb(color: AppColors.primary, size: 340)),
+            Positioned(bottom: -100, left: -60, child: GlowOrb(color: AppColors.accent, size: 300, opacity: 0.1)),
             SafeArea(
               child: Center(
                 child: SingleChildScrollView(
@@ -68,7 +68,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
                         children: [
                           const BrandMark(),
                           const SizedBox(height: 28),
-                          const Text(
+                          Text(
                             'StillHere',
                             textAlign: TextAlign.center,
                             style: TextStyle(
@@ -79,7 +79,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
                             ),
                           ),
                           const SizedBox(height: 10),
-                          const Text(
+                          Text(
                             'Подключитесь к своему узлу.\nАдрес и пароль даст тот, кто его развернул.',
                             textAlign: TextAlign.center,
                             style: TextStyle(color: AppColors.textSecondary, fontSize: 15, height: 1.5),

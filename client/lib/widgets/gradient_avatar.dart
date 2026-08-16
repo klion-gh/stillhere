@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/appearance.dart';
 import '../core/theme.dart';
+import 'animated_background.dart';
 
 /// Circular avatar with a per-user gradient derived from the username, so
 /// the same person is always the same color across devices.
@@ -51,19 +54,18 @@ class GradientAvatar extends StatelessWidget {
   }
 }
 
-/// The night-gradient backdrop shared by the full-screen flows (connect,
-/// auth, call).
-class NightBackdrop extends StatelessWidget {
+/// The backdrop shared by the full-screen flows (connect, auth, chat list,
+/// call). Renders the palette gradient plus whichever animated background
+/// the user picked in Appearance.
+class NightBackdrop extends ConsumerWidget {
   final Widget child;
 
   const NightBackdrop({super.key, required this.child});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(gradient: AppColors.nightGradient),
-      child: child,
-    );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final background = ref.watch(appearanceProvider).backgroundId;
+    return AnimatedBackdrop(background: background, child: child);
   }
 }
 

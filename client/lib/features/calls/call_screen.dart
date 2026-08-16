@@ -70,8 +70,8 @@ class CallScreen extends ConsumerWidget {
               ),
             ),
             if (state.inputDevices.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(20),
+              Padding(
+                padding: const EdgeInsets.all(20),
                 child: Text('Микрофоны не найдены', style: TextStyle(color: AppColors.textSecondary)),
               ),
             ...state.inputDevices.map(
@@ -146,7 +146,7 @@ class CallScreen extends ConsumerWidget {
                   Text(
                     peerUsername.isNotEmpty ? '@$peerUsername' : 'Звонок',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppColors.textPrimary,
                       fontSize: 26,
                       fontWeight: FontWeight.w600,
@@ -280,7 +280,7 @@ class _PingChip extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
           ),
           const SizedBox(width: 6),
@@ -480,7 +480,7 @@ class _CircleButton extends StatelessWidget {
         const SizedBox(height: 10),
         Text(
           label,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 12.5),
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 12.5),
         ),
       ],
     );

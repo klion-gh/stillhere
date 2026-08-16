@@ -103,7 +103,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       child: Text(
                         'Ошибка загрузки:\n$err',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: AppColors.textSecondary, height: 1.5),
+                        style: TextStyle(color: AppColors.textSecondary, height: 1.5),
                       ),
                     ),
                   ),
@@ -161,7 +161,7 @@ class _ChatHeader extends StatelessWidget {
           Expanded(
             child: Text(
               peerUsername.isNotEmpty ? '@$peerUsername' : 'Чат',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textPrimary,
@@ -194,7 +194,7 @@ class _Composer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.background,
         border: Border(top: BorderSide(color: AppColors.surfaceOutline)),
       ),
@@ -265,7 +265,7 @@ class _EmptyChat extends StatelessWidget {
           Text(
             peerUsername.isNotEmpty ? 'Это начало вашего чата с @$peerUsername' : 'Пока нет сообщений',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 14.5, height: 1.5),
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 14.5, height: 1.5),
           ),
         ],
       ),

@@ -1,5 +1,6 @@
 import 'package:local_notifier/local_notifier.dart';
 
+import 'call_notifications.dart';
 import 'desktop_shell.dart';
 import 'logger.dart';
 
@@ -11,7 +12,8 @@ class DesktopNotifications {
   static bool _ready = false;
 
   /// Wired up by the app so toast actions can drive navigation and calls.
-  static void Function(String conversationId, String peerUsername, bool accept)? onCallAction;
+  static void Function(String conversationId, String peerUsername, CallNotificationAction action)?
+      onCallAction;
   static void Function(String conversationId, String peerUsername)? onMessageTap;
 
   // Held so the call toast can be dismissed when the call ends. Message
@@ -48,12 +50,14 @@ class DesktopNotifications {
       );
       toast.onClick = () {
         DesktopShell.instance.showWindow();
-        onCallAction?.call(conversationId, peerUsername, false);
+        onCallAction?.call(conversationId, peerUsername, CallNotificationAction.open);
       };
       toast.onClickAction = (index) {
-        final accept = index == 0;
-        if (accept) DesktopShell.instance.showWindow();
-        onCallAction?.call(conversationId, peerUsername, accept);
+        // Index follows the order the actions were declared above.
+        final action = index == 0 ? CallNotificationAction.accept : CallNotificationAction.decline;
+        if (action == CallNotificationAction.accept) DesktopShell.instance.showWindow();
+        AppLogger.info(_tag, 'toast action $index -> $action');
+        onCallAction?.call(conversationId, peerUsername, action);
       };
       _callToast = toast;
       await toast.show();
