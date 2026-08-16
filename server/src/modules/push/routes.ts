@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
+import { getFirebaseClientConfig } from "./client_config.js";
 
 const registerSchema = z.object({
   token: z.string().min(1).max(4096),
@@ -12,6 +13,18 @@ const unregisterSchema = z.object({
 });
 
 export async function pushRoutes(app: FastifyInstance) {
+  /// Tells the client which Firebase project this node pushes through, so a
+  /// single published APK works against any node. Gated by the node token
+  /// like everything else, and deliberately carries no credentials — only
+  /// the values already embedded in any published app.
+  app.get("/node/push-config", async (request, reply) => {
+    const config = getFirebaseClientConfig(request.log);
+    if (!config) {
+      return reply.send({ enabled: false });
+    }
+    return reply.send({ enabled: true, ...config });
+  });
+
   app.post("/devices/register", { preHandler: app.authenticate }, async (request, reply) => {
     const parsed = registerSchema.safeParse(request.body);
     if (!parsed.success) {

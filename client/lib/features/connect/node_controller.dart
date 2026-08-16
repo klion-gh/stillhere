@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -7,6 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/logger.dart';
 import '../../core/node_http_client.dart';
 import '../../core/providers.dart';
+import '../../core/push_service.dart';
+import 'node_client.dart';
 import 'node_state.dart';
 
 const _tag = 'node';
@@ -68,12 +72,51 @@ class NodeController extends AsyncNotifier<NodeState> {
 
       AppLogger.info(_tag, 'paired with $host');
       state = AsyncValue.data(NodeState(host: host, nodeToken: nodeToken, pinnedFingerprint: fingerprintToStore));
+
+      // Each node pushes through its own Firebase project, so the app is
+      // told which one to use rather than carrying a hardcoded project.
+      unawaited(_configurePushFromNode(dio, nodeToken));
     } catch (e, st) {
       final exception = _mapError(e);
       AppLogger.error(_tag, 'pairing with $host failed', e, st);
       state = AsyncValue.error(exception, StackTrace.current);
       throw exception;
     }
+  }
+
+  /// Asks the node which Firebase project to use for push. A node without
+  /// one configured simply answers that it's disabled, and the app runs
+  /// without background delivery.
+  Future<void> _configurePushFromNode(Dio dio, String nodeToken) async {
+    try {
+      final res = await dio.get(
+        '/node/push-config',
+        options: Options(headers: {'X-Node-Token': nodeToken}),
+      );
+      final data = res.data as Map<String, dynamic>;
+      if (data['enabled'] != true) {
+        AppLogger.info(_tag, 'node has no push configured');
+        await PushService.forget();
+        return;
+      }
+      await PushService.configure(PushConfig.fromJson(data));
+    } catch (e) {
+      AppLogger.warn(_tag, 'could not fetch push config: $e');
+    }
+  }
+
+  /// Loads push config for a node paired in an earlier session, so push keeps
+  /// working across restarts without re-pairing.
+  Future<void> restorePushConfig() async {
+    final current = state.valueOrNull;
+    if (current == null || !current.isConnected) return;
+    final stored = await loadStoredPushConfig();
+    if (stored != null) {
+      await PushService.configure(stored);
+      return;
+    }
+    // Paired before this mechanism existed (or config was cleared): ask now.
+    await _configurePushFromNode(buildNodeDio(ref), current.nodeToken!);
   }
 
   NodeConnectException _mapError(Object e) {
@@ -108,6 +151,9 @@ class NodeController extends AsyncNotifier<NodeState> {
   /// rejected server-side (password rotated, node reinstalled, etc).
   Future<void> disconnect() async {
     AppLogger.warn(_tag, 'disconnecting from node');
+    // Drop the node's Firebase project too, so the next node doesn't inherit
+    // it and end up pushing through someone else's project.
+    await PushService.forget();
     await ref.read(nodeStorageProvider).clearAll();
     state = const AsyncValue.data(NodeState());
   }

@@ -23,3 +23,6 @@ client/**/ephemeral/
 **/*-firebase-adminsdk-*.json
 docker/secrets/*
 !docker/secrets/.gitkeep
+# Firebase client config is now served by the node at runtime, so no build
+# carries a hardcoded project. A stray copy here would silently re-bake one.
+client/android/app/google-services.json

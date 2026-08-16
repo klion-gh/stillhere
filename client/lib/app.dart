@@ -35,6 +35,12 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
     _wsSub = ref.read(wsClientProvider).events.listen(_handleWsEvent);
     CallNotifications.onCallAction = _handleCallNotificationAction;
 
+    // Bring push up for a node paired in an earlier session; the project to
+    // use is the node's, not something baked into this build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(ref.read(nodeControllerProvider.notifier).restorePushConfig());
+    });
+
     DesktopNotifications.onCallAction = (conversationId, peerUsername, action) {
       _handleCallNotificationAction(CallNotificationEvent(
         action: action,

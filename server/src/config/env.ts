@@ -20,6 +20,12 @@ const envSchema = z.object({
   // Path to a Firebase service account JSON. Optional: without it the node
   // still works, it just can't wake devices that aren't connected.
   FIREBASE_SERVICE_ACCOUNT_FILE: z.string().optional(),
+  // Path to the operator's google-services.json. Served to clients so one
+  // published APK can work against any node — each with its own Firebase
+  // project — instead of everyone having to rebuild the app.
+  FIREBASE_CLIENT_CONFIG_FILE: z.string().optional(),
+  // Which app entry to pick when the Firebase project holds more than one.
+  FIREBASE_ANDROID_PACKAGE: z.string().default("com.stillhere.stillhere"),
 });
 
 export const env = envSchema.parse(process.env);

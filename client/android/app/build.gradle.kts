@@ -3,8 +3,10 @@ import java.io.FileInputStream
 
 plugins {
     id("com.android.application")
-    id("com.google.gms.google-services")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    // No com.google.gms.google-services here on purpose: that plugin bakes a
+    // single Firebase project into the APK at build time. Firebase is
+    // initialised at runtime from config the node supplies, so one published
+    // build works against any node with its own project.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
