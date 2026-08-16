@@ -133,18 +133,28 @@ Postgres-данные хранятся в именованном volume `stillhe
 
 Без этого раздела узел полностью работоспособен — просто на Android звонки и сообщения доходят, только пока приложение открыто. Чтобы они приходили и в фоне, нужен Firebase Cloud Messaging.
 
-Важно: **у каждого узла должен быть свой проект Firebase**. Ключ от чужого проекта не подойдёт, а свой ключ даёт право отправлять push всем, кто пользуется вашей сборкой приложения — поэтому он не хранится в репозитории.
+**Пересобирать приложение не нужно.** Узел сам сообщает приложению, каким проектом Firebase пользоваться, поэтому готовый APK из релизов работает с любым узлом — с вашим проектом, а не с чужим.
+
+У каждого узла должен быть **свой** проект Firebase: ключ от чужого проекта не подойдёт, а свой даёт право отправлять push вашим пользователям — поэтому он и не хранится в репозитории.
 
 1. Создайте проект на [console.firebase.google.com](https://console.firebase.google.com).
-2. Добавьте Android-приложение с тем же package name, что у вашей сборки (по умолчанию `com.stillhere.stillhere`), скачайте `google-services.json` и положите в `client/android/app/`.
-3. Настройки проекта → «Сервисные аккаунты» → «Создать закрытый ключ». Полученный JSON положите на сервер в `docker/secrets/firebase-service-account.json` (каталог в `.gitignore`).
-4. В `docker/.env` укажите:
+2. Добавьте в него Android-приложение с package name **`com.stillhere.stillhere`** (именно такой, иначе Firebase не примет запросы от готового APK) и скачайте `google-services.json`.
+3. Настройки проекта → «Сервисные аккаунты» → «Создать закрытый ключ».
+4. Положите оба файла на сервер в `docker/secrets/` (каталог в `.gitignore`):
+   ```
+   docker/secrets/google-services.json          # какой проект — отдаётся приложению
+   docker/secrets/firebase-service-account.json # право отправлять — только для сервера
+   ```
+5. В `docker/.env`:
    ```
    FIREBASE_SERVICE_ACCOUNT_FILE=/run/secrets/firebase-service-account.json
+   FIREBASE_CLIENT_CONFIG_FILE=/run/secrets/google-services.json
    ```
-5. `docker compose up -d --build backend`. В логах должно появиться `push: firebase initialised`; если ключа нет — `background delivery disabled`, и это не ошибка.
+6. `docker compose up -d --build backend`. В логах появится `push: firebase initialised` и `push: client config loaded`. Если файлов нет — `background delivery disabled`, это не ошибка: узел работает, просто без фоновой доставки.
 
-Так как `google-services.json` встраивается в APK на этапе сборки, **APK нужно собрать самому** — готовый файл из релизов привязан к нашему проекту Firebase.
+Проверить: `curl -k https://ваш-адрес/node/push-config -H "X-Node-Token: ..."` должен вернуть `enabled: true`.
+
+Приватный ключ приложению **не передаётся** — из четырёх значений в `google-services.json` секретов нет (они и так лежат внутри любого опубликованного APK), а отправлять push может только сервер.
 
 ## Лицензия
 
