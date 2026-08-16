@@ -10,6 +10,13 @@ set(BINARY_NAME "stillhere")
 # versions of CMake.
 cmake_policy(VERSION 3.14...3.25)
 
+# The Firebase C++ SDK that firebase_core pulls in for Windows still declares
+# cmake_minimum_required below 3.5, which current CMake refuses outright and
+# which fails the whole Windows build. We don't use Firebase on desktop at all
+# (push is Android-only), but the plugin still has to configure, so allow the
+# older policy version for those vendored subprojects.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+
 # Define build configuration option.
 get_property(IS_MULTICONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(IS_MULTICONFIG)
