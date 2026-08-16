@@ -67,11 +67,17 @@ log "Перезапускаю backend..."
 
 log "Проверяю..."
 sleep 6
-# Not --tail: on a node that was already running, compose won't restart the
-# container and the startup line sits far above the recent request logs.
-# `compose logs` only covers the current container, so any occurrence is
-# proof that the running instance initialised push.
-if (cd "$DOCKER_DIR" && docker compose logs backend 2>&1) | grep -q "push: firebase initialised"; then
+# Collected into a variable rather than piped: `grep -q` exits at the first
+# match, which SIGPIPEs `docker compose logs`, and under `set -o pipefail`
+# that fails the whole pipeline — so finding the line would have been read
+# as *not* finding it.
+#
+# Not --tail either: on a node that was already running compose won't
+# restart the container, leaving the startup line far above the recent
+# request logs. `compose logs` only covers the current container, so any
+# occurrence proves the running instance initialised push.
+backend_logs="$( (cd "$DOCKER_DIR" && docker compose logs backend 2>&1) || true )"
+if printf '%s' "$backend_logs" | grep -q "push: firebase initialised"; then
   echo "Push включён — звонки и сообщения будут доходить в фоне."
 else
   warn "В логах нет 'push: firebase initialised'. Посмотрите:"
