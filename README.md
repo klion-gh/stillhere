@@ -23,11 +23,19 @@
 curl -fsSL https://raw.githubusercontent.com/klion-gh/stillhere/main/install.sh | sudo bash
 ```
 
+Запускайте это в обычной SSH-сессии — установщик задаёт вопросы. Если терминала нет (скрипт, CI), передайте ответы переменными окружения:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/klion-gh/stillhere/main/install.sh -o install.sh
+STILLHERE_NODE_PASSWORD='ваш-пароль' STILLHERE_DOMAIN='' sudo -E bash install.sh
+```
+
 Установщик сам:
 - поставит Docker, если его нет;
 - спросит пароль узла и (опционально) домен;
 - сгенерирует все секреты;
 - настроит TLS — self-signed сертификат с TOFU-проверкой на клиенте, если домена нет, либо ваш существующий сертификат/новый через Let's Encrypt, если домен есть;
+- предложит настроить push-уведомления (можно пропустить и включить позже);
 - поднимет весь стек (`docker compose up -d`).
 
 В конце выведет адрес узла (и, если сертификат self-signed, его SHA-256 отпечаток) — это и нужно будет ввести в приложении StillHere на экране подключения.
@@ -137,22 +145,25 @@ Postgres-данные хранятся в именованном volume `stillhe
 
 У каждого узла должен быть **свой** проект Firebase: ключ от чужого проекта не подойдёт, а свой даёт право отправлять push вашим пользователям — поэтому он и не хранится в репозитории.
 
-1. Создайте проект на [console.firebase.google.com](https://console.firebase.google.com).
-2. Добавьте в него Android-приложение с package name **`com.stillhere.stillhere`** (именно такой, иначе Firebase не примет запросы от готового APK) и скачайте `google-services.json`.
-3. Настройки проекта → «Сервисные аккаунты» → «Создать закрытый ключ».
-4. Положите оба файла на сервер в `docker/secrets/` (каталог в `.gitignore`):
-   ```
-   docker/secrets/google-services.json          # какой проект — отдаётся приложению
-   docker/secrets/firebase-service-account.json # право отправлять — только для сервера
-   ```
-5. В `docker/.env`:
-   ```
-   FIREBASE_SERVICE_ACCOUNT_FILE=/run/secrets/firebase-service-account.json
-   FIREBASE_CLIENT_CONFIG_FILE=/run/secrets/google-services.json
-   ```
-6. `docker compose up -d --build backend`. В логах появится `push: firebase initialised` и `push: client config loaded`. Если файлов нет — `background delivery disabled`, это не ошибка: узел работает, просто без фоновой доставки.
+Установщик предложит настроить push сразу. Если вы пропустили этот шаг — включите позже в любой момент:
 
-Проверить: `curl -k https://ваш-адрес/node/push-config -H "X-Node-Token: ..."` должен вернуть `enabled: true`.
+```bash
+cd ~/stillhere && ./enable-push.sh
+```
+
+Скрипт скажет, каких файлов не хватает и какие именно команды выполнить. Что нужно сделать:
+
+1. Создайте проект на [console.firebase.google.com](https://console.firebase.google.com).
+2. Добавьте в него Android-приложение с package name **`com.stillhere.stillhere`** (именно такой, иначе готовый APK не сможет работать с вашим проектом) и скачайте `google-services.json`.
+3. Настройки проекта → «Сервисные аккаунты» → «Создать закрытый ключ».
+4. Скопируйте оба файла на сервер — **со своего компьютера**, они скачиваются в браузере:
+   ```bash
+   scp google-services.json root@ВАШ_СЕРВЕР:~/stillhere/docker/secrets/
+   scp ваш-ключ.json root@ВАШ_СЕРВЕР:~/stillhere/docker/secrets/firebase-service-account.json
+   ```
+5. `cd ~/stillhere && ./enable-push.sh`
+
+В логах появится `push: firebase initialised` и `push: client config loaded`. Если файлов нет — `background delivery disabled`, это не ошибка: узел работает, просто без фоновой доставки.
 
 Приватный ключ приложению **не передаётся** — из четырёх значений в `google-services.json` секретов нет (они и так лежат внутри любого опубликованного APK), а отправлять push может только сервер.
 
