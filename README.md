@@ -112,7 +112,7 @@ flutter run -d windows      # или -d <android-device-id>
 1. Docker + Docker Compose на сервере.
 2. `git clone` этого репозитория.
 3. `cp docker/.env.example docker/.env` и заполнить: `NODE_HOST` (домен или IP), при наличии домена — `DOMAIN`/`ACME_EMAIL`, секреты (`openssl rand -hex 32` для каждого `*_SECRET`), `NODE_SETUP_PASSWORD` — пароль, который вы дадите друзьям.
-4. `docker/Caddyfile` — по умолчанию в репозитории настроен на домен + автоматический Let's Encrypt. Для self-signed/IP-варианта или переиспользования уже имеющегося сертификата смотрите, какой `Caddyfile` генерирует `install.sh`, и повторите вручную (генерация self-signed сертификата — обычный `openssl req -x509 ...`, пример есть в скрипте).
+4. Создать `docker/Caddyfile` — в репозитории его нет, есть только [docker/Caddyfile.example](docker/Caddyfile.example) с тремя готовыми вариантами (домен + Let's Encrypt, IP + self-signed, свой сертификат). Файл специально не отслеживается git: иначе обновление кода затирало бы TLS-настройки узла. Генерация self-signed сертификата — обычный `openssl req -x509 ...`, пример есть в `install.sh`.
 5. Открыть порты в файрволе (`ufw` пример):
    ```bash
    ufw allow 80/tcp
@@ -130,12 +130,27 @@ flutter run -d windows      # или -d <android-device-id>
 ### Обновление после изменений в коде
 
 ```bash
-cd docker
 git pull
-docker compose up -d --build backend
+cd docker && docker compose up -d --build backend
 ```
 
 Postgres-данные хранятся в именованном volume `stillhere_postgres_data` и не теряются между пересборками.
+
+Обновляетесь с версии 0.10.0 или раньше? До 0.11.0 `docker/Caddyfile` лежал в
+репозитории, и `git pull` заменит ваш рабочий конфиг на шаблон — Caddy после
+этого не стартует (`unrecognized global option: tls`), а узел перестанет
+отвечать по HTTPS. Один раз сделайте так:
+
+```bash
+cp docker/Caddyfile /tmp/Caddyfile.bak
+git checkout -- docker/Caddyfile && git pull
+cp /tmp/Caddyfile.bak docker/Caddyfile
+cd docker && docker compose up -d --build
+```
+
+Дальше файл не отслеживается и обновления его не трогают. Сертификаты в
+`docker/certs/` не затрагивались никогда, так что закреплённый в приложениях
+отпечаток остаётся прежним и переподключаться заново не нужно.
 
 ## Push-уведомления (необязательно)
 

@@ -50,6 +50,13 @@ install_docker() {
 fetch_repo() {
   log "Получаю код StillHere в $INSTALL_DIR..."
   if [ -d "$INSTALL_DIR/.git" ]; then
+    # docker/Caddyfile used to be tracked and is now generated per node. Git
+    # won't fast-forward past the commit that drops it while the local copy
+    # differs, so put the tracked version back first — write_config rewrites
+    # the real one further down anyway.
+    if git -C "$INSTALL_DIR" ls-files --error-unmatch docker/Caddyfile >/dev/null 2>&1; then
+      git -C "$INSTALL_DIR" checkout -- docker/Caddyfile
+    fi
     git -C "$INSTALL_DIR" pull --ff-only
   else
     git clone --depth 1 "$REPO_URL" "$INSTALL_DIR"

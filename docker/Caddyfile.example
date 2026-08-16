@@ -1,0 +1,25 @@
+# Reference only — install.sh writes the real docker/Caddyfile, which is
+# gitignored so that updating a node never clobbers its TLS setup.
+#
+# Domain + automatic Let's Encrypt (what install.sh writes when you give it a
+# domain and no certificate exists yet):
+#
+#     example.com {
+#     	tls you@example.com
+#     	reverse_proxy backend:3000
+#     }
+#
+# Bare IP, self-signed certificate (what install.sh writes otherwise — the app
+# pins the certificate on first connection, so self-signed is fine):
+#
+#     :443 {
+#     	tls /etc/caddy/certs/selfsigned.crt /etc/caddy/certs/selfsigned.key
+#     	reverse_proxy backend:3000
+#     }
+#
+# A certificate you already manage:
+#
+#     example.com {
+#     	tls /etc/caddy/certs/domain.crt /etc/caddy/certs/domain.key
+#     	reverse_proxy backend:3000
+#     }
