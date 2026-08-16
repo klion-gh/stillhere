@@ -67,7 +67,11 @@ log "Перезапускаю backend..."
 
 log "Проверяю..."
 sleep 6
-if (cd "$DOCKER_DIR" && docker compose logs backend --tail=40 2>&1) | grep -q "push: firebase initialised"; then
+# Not --tail: on a node that was already running, compose won't restart the
+# container and the startup line sits far above the recent request logs.
+# `compose logs` only covers the current container, so any occurrence is
+# proof that the running instance initialised push.
+if (cd "$DOCKER_DIR" && docker compose logs backend 2>&1) | grep -q "push: firebase initialised"; then
   echo "Push включён — звонки и сообщения будут доходить в фоне."
 else
   warn "В логах нет 'push: firebase initialised'. Посмотрите:"
