@@ -11,6 +11,7 @@
 set -euo pipefail
 
 REPO_URL="${STILLHERE_REPO_URL:-https://github.com/klion-gh/stillhere.git}"
+RAW_URL="${STILLHERE_RAW_URL:-https://raw.githubusercontent.com/klion-gh/stillhere/main/install.sh}"
 INSTALL_DIR="${STILLHERE_DIR:-$HOME/stillhere}"
 
 log()  { printf '\n\033[1;36m==>\033[0m %s\n' "$1"; }
@@ -55,6 +56,20 @@ fetch_repo() {
   fi
 }
 
+# Every interactive read goes through the terminal explicitly.
+#
+# The documented entry point is `curl ... | sudo bash`, which makes the
+# script itself stdin. A plain `read` would then consume the remaining
+# script text instead of waiting for the user — silently returning empty,
+# and sending the password loop below spinning forever.
+require_tty() {
+  if [ ! -r /dev/tty ]; then
+    die "Нужен терминал для ввода. Скачайте установщик и запустите его отдельно:
+  curl -fsSL $RAW_URL -o install.sh && sudo bash install.sh
+Либо задайте всё переменными окружения (STILLHERE_NODE_PASSWORD, STILLHERE_DOMAIN, ...)."
+  fi
+}
+
 # Prompts for a value, honoring an env var override for non-interactive runs.
 prompt() {
   local var_name="$1" prompt_text="$2" default_value="${3:-}"
@@ -65,9 +80,22 @@ prompt() {
     printf '%s\n' "${!var_name}"
     return
   fi
+  require_tty
   local reply
-  read -rp "$prompt_text" reply
+  read -rp "$prompt_text" reply < /dev/tty
   printf '%s\n' "${reply:-$default_value}"
+}
+
+confirm() {
+  local var_name="$1" prompt_text="$2"
+  if [ -n "${!var_name+x}" ]; then
+    [ "${!var_name}" = "yes" ] || [ "${!var_name}" = "y" ]
+    return
+  fi
+  require_tty
+  local reply
+  read -rp "$prompt_text" reply < /dev/tty
+  [[ "$reply" =~ ^[yYдД] ]]
 }
 
 prompt_node_password() {
@@ -76,15 +104,16 @@ prompt_node_password() {
     printf '%s\n' "$env_value"
     return
   fi
+  require_tty
   local pass1 pass2
   while true; do
-    read -rsp "Пароль узла (минимум 8 символов, его будут вводить друзья в приложении): " pass1
+    read -rsp "Пароль узла (минимум 8 символов, его будут вводить друзья в приложении): " pass1 < /dev/tty
     echo >&2
     if [ "${#pass1}" -lt 8 ]; then
       warn "Слишком короткий, минимум 8 символов."
       continue
     fi
-    read -rsp "Повторите пароль: " pass2
+    read -rsp "Повторите пароль: " pass2 < /dev/tty
     echo >&2
     if [ "$pass1" != "$pass2" ]; then
       warn "Пароли не совпали, попробуйте ещё раз."
@@ -93,6 +122,86 @@ prompt_node_password() {
     printf '%s\n' "$pass1"
     return
   done
+}
+
+# Optional Firebase setup.
+#
+# Both files come from the Firebase console in a browser, so they land on the
+# operator's own machine — there's nothing to download here. The practical
+# move is to tell them exactly what to copy and wait, rather than trying to
+# fetch anything ourselves. Skipping is fine: the node runs without push and
+# enable-push.sh turns it on later.
+setup_push() {
+  local certs_dir="$1" node_host="$2"
+  local secrets_dir="$INSTALL_DIR/docker/secrets"
+  mkdir -p "$secrets_dir"
+  chmod 700 "$secrets_dir"
+
+  echo
+  log "Push-уведомления (необязательно)"
+  cat <<'EOF'
+Без них звонки и сообщения на Android доходят, только пока приложение открыто.
+Чтобы включить, нужен свой проект Firebase — это бесплатно и занимает пару минут.
+EOF
+
+  if ! confirm STILLHERE_SETUP_PUSH "Настроить сейчас? [y/N]: "; then
+    echo "Пропускаю. Включить позже: $INSTALL_DIR/enable-push.sh"
+    return
+  fi
+
+  cat <<EOF
+
+1. Откройте https://console.firebase.google.com и создайте проект.
+2. Добавьте в него Android-приложение с package name:
+     com.stillhere.stillhere
+   (именно такой — иначе готовый APK не сможет работать с вашим проектом)
+   Скачайте google-services.json.
+3. Настройки проекта -> Сервисные аккаунты -> Создать закрытый ключ.
+
+Теперь скопируйте оба файла сюда — выполните НА СВОЁМ КОМПЬЮТЕРЕ:
+
+  scp google-services.json root@$node_host:$secrets_dir/
+  scp <ваш-ключ>.json root@$node_host:$secrets_dir/firebase-service-account.json
+
+EOF
+
+  require_tty
+  local reply
+  while true; do
+    read -rp "Когда файлы будут на месте, нажмите Enter (или 's' чтобы пропустить): " reply < /dev/tty
+    if [[ "$reply" =~ ^[sSпП] ]]; then
+      echo "Пропускаю. Включить позже: $INSTALL_DIR/enable-push.sh"
+      return
+    fi
+    if validate_push_files "$secrets_dir"; then
+      log "Push настроен."
+      return
+    fi
+    warn "Проверьте пути и попробуйте ещё раз, либо нажмите 's' чтобы пропустить."
+  done
+}
+
+# Both files must be present and parse as JSON before we claim push works.
+validate_push_files() {
+  local dir="$1"
+  local ok=0
+  if [ ! -f "$dir/google-services.json" ]; then
+    warn "Не найден $dir/google-services.json"
+    ok=1
+  elif ! python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$dir/google-services.json" 2>/dev/null; then
+    warn "google-services.json не читается как JSON"
+    ok=1
+  fi
+  if [ ! -f "$dir/firebase-service-account.json" ]; then
+    warn "Не найден $dir/firebase-service-account.json"
+    ok=1
+  elif ! python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$dir/firebase-service-account.json" 2>/dev/null; then
+    warn "firebase-service-account.json не читается как JSON"
+    ok=1
+  fi
+  [ "$ok" -eq 0 ] || return 1
+  chmod 600 "$dir"/*.json
+  return 0
 }
 
 detect_public_ip() {
@@ -214,8 +323,16 @@ NODE_TOKEN_TTL=365d
 NODE_SETUP_PASSWORD=$node_password
 
 CORS_ORIGIN=*
+
+# Push. The paths are always set; the server treats missing files as
+# "push disabled", so dropping them in later and restarting is all it takes.
+FIREBASE_SERVICE_ACCOUNT_FILE=/run/secrets/firebase-service-account.json
+FIREBASE_CLIENT_CONFIG_FILE=/run/secrets/google-services.json
+FIREBASE_ANDROID_PACKAGE=com.stillhere.stillhere
 EOF
   chmod 600 "$docker_dir/.env"
+
+  setup_push "$certs_dir" "$node_host"
 
   log "Поднимаю стек (docker compose up -d --build)..."
   (cd "$docker_dir" && docker compose up -d --build)
