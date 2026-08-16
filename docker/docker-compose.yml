@@ -41,6 +41,10 @@ services:
       # Empty unless secrets/firebase-service-account.json exists; the server
       # treats push as optional and just logs that it's disabled.
       FIREBASE_SERVICE_ACCOUNT_FILE: ${FIREBASE_SERVICE_ACCOUNT_FILE}
+      # Client-side Firebase values served to apps so one published build can
+      # work against any node. Not a credential.
+      FIREBASE_CLIENT_CONFIG_FILE: ${FIREBASE_CLIENT_CONFIG_FILE}
+      FIREBASE_ANDROID_PACKAGE: ${FIREBASE_ANDROID_PACKAGE:-com.stillhere.stillhere}
     volumes:
       # Mounted rather than baked into the image — it's a credential, and it
       # must never end up in a layer that could be pushed to a registry.
