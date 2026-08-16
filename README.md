@@ -129,6 +129,23 @@ docker compose up -d --build backend
 
 Postgres-данные хранятся в именованном volume `stillhere_postgres_data` и не теряются между пересборками.
 
+## Push-уведомления (необязательно)
+
+Без этого раздела узел полностью работоспособен — просто на Android звонки и сообщения доходят, только пока приложение открыто. Чтобы они приходили и в фоне, нужен Firebase Cloud Messaging.
+
+Важно: **у каждого узла должен быть свой проект Firebase**. Ключ от чужого проекта не подойдёт, а свой ключ даёт право отправлять push всем, кто пользуется вашей сборкой приложения — поэтому он не хранится в репозитории.
+
+1. Создайте проект на [console.firebase.google.com](https://console.firebase.google.com).
+2. Добавьте Android-приложение с тем же package name, что у вашей сборки (по умолчанию `com.stillhere.stillhere`), скачайте `google-services.json` и положите в `client/android/app/`.
+3. Настройки проекта → «Сервисные аккаунты» → «Создать закрытый ключ». Полученный JSON положите на сервер в `docker/secrets/firebase-service-account.json` (каталог в `.gitignore`).
+4. В `docker/.env` укажите:
+   ```
+   FIREBASE_SERVICE_ACCOUNT_FILE=/run/secrets/firebase-service-account.json
+   ```
+5. `docker compose up -d --build backend`. В логах должно появиться `push: firebase initialised`; если ключа нет — `background delivery disabled`, и это не ошибка.
+
+Так как `google-services.json` встраивается в APK на этапе сборки, **APK нужно собрать самому** — готовый файл из релизов привязан к нашему проекту Firebase.
+
 ## Лицензия
 
 [MIT](LICENSE).
