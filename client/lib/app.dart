@@ -44,11 +44,11 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
       await ref.read(authControllerProvider.notifier).registerPushToken();
     };
 
-    // Bring push up for a node paired in an earlier session; the project to
-    // use is the node's, not something baked into this build.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(ref.read(nodeControllerProvider.notifier).restorePushConfig());
-    });
+    // main() already brought push up from the stored config. This only covers
+    // the node paired before that config was being saved: it has to wait for
+    // the node state to load, which is exactly why doing it from a post-frame
+    // callback used to skip setup altogether.
+    unawaited(_restorePushConfigWhenNodeReady());
 
     DesktopNotifications.onCallAction = (conversationId, peerUsername, action) {
       _handleCallNotificationAction(CallNotificationEvent(
@@ -60,6 +60,19 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
     DesktopNotifications.onMessageTap = (conversationId, peerUsername) {
       ref.read(routerProvider).push('/chat/$conversationId', extra: peerUsername);
     };
+  }
+
+  /// Waits for the stored node session to finish loading before asking it for
+  /// push config. Reading the provider's future rather than its current value
+  /// is the difference between "not paired" and "not loaded yet".
+  Future<void> _restorePushConfigWhenNodeReady() async {
+    if (PushService.isAvailable) return;
+    try {
+      await ref.read(nodeControllerProvider.future);
+      await ref.read(nodeControllerProvider.notifier).restorePushConfig();
+    } catch (_) {
+      // No node paired, or it couldn't be reached — push simply stays off.
+    }
   }
 
   /// Accept/decline tapped on a call notification, or the notification body
@@ -176,11 +189,13 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
       unawaited(ref.read(conversationsProvider.notifier).refresh());
     }
 
-    // Heads-up notification with accept/decline, and the ringtone on
-    // Android (a backgrounded app can't reliably play audio itself).
+    // Heads-up notification with accept/decline. Silent: the call screen this
+    // pushes starts the looping ring, and the channel's own sound would play
+    // once over the top of it.
     unawaited(CallNotifications.showIncomingCall(
       conversationId: conversationId,
       peerUsername: peerUsername,
+      withSound: false,
     ));
     unawaited(DesktopNotifications.showIncomingCall(
       conversationId: conversationId,

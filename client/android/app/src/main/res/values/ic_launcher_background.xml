@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Adaptive icons can't use a gradient drawable as the background layer
-         on every launcher, so the flat midnight background is used instead. -->
-    <color name="ic_launcher_background">#141026</color>
+    <!-- The logo is a cut-out and should stay one: no plate behind it, on the
+         launcher or anywhere else. Launchers that mask adaptive icons will
+         show the artwork against the wallpaper. -->
+    <color name="ic_launcher_background">#00000000</color>
+
+    <!-- The splash is a different matter — the app is dark in every palette,
+         so the window background matches midnight and the white flash goes. -->
+    <color name="splash_background">#141026</color>
 </resources>

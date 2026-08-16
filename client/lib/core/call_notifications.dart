@@ -39,6 +39,24 @@ class CallNotifications {
   /// control from outside the widget tree.
   static void Function(CallNotificationEvent event)? onCallAction;
 
+  static const _callActions = <AndroidNotificationAction>[
+    AndroidNotificationAction(
+      _declineAction,
+      'Отклонить',
+      showsUserInterface: false,
+      cancelNotification: true,
+    ),
+    AndroidNotificationAction(
+      _acceptAction,
+      'Ответить',
+      showsUserInterface: true,
+      cancelNotification: true,
+    ),
+  ];
+
+  /// Used when the push arrived at a process that isn't running the app —
+  /// nothing else can ring, so the channel does it. Android plays a channel
+  /// sound exactly once; the looping ring takes over once the app is up.
   static const AndroidNotificationDetails _incomingCallDetails = AndroidNotificationDetails(
     // Channel settings (sound in particular) are frozen when the channel is
     // first created, so adding the ringtone required a new channel id.
@@ -57,20 +75,26 @@ class CallNotifications {
     autoCancel: false,
     fullScreenIntent: true,
     visibility: NotificationVisibility.public,
-    actions: <AndroidNotificationAction>[
-      AndroidNotificationAction(
-        _declineAction,
-        'Отклонить',
-        showsUserInterface: false,
-        cancelNotification: true,
-      ),
-      AndroidNotificationAction(
-        _acceptAction,
-        'Ответить',
-        showsUserInterface: true,
-        cancelNotification: true,
-      ),
-    ],
+    actions: _callActions,
+  );
+
+  /// Same notification, no sound: the app is alive and RingtoneService is
+  /// already looping the ring, so the channel would only double it up.
+  static const AndroidNotificationDetails _incomingCallSilentDetails = AndroidNotificationDetails(
+    'incoming_calls_silent',
+    'Входящие звонки (без звука)',
+    channelDescription: 'Показывается, когда звонок уже звучит в приложении',
+    importance: Importance.max,
+    priority: Priority.max,
+    category: AndroidNotificationCategory.call,
+    playSound: false,
+    enableVibration: true,
+    vibrationPattern: null,
+    ongoing: true,
+    autoCancel: false,
+    fullScreenIntent: true,
+    visibility: NotificationVisibility.public,
+    actions: _callActions,
   );
 
   static const AndroidNotificationDetails _messageDetails = AndroidNotificationDetails(
@@ -84,7 +108,10 @@ class CallNotifications {
     enableVibration: true,
   );
 
-  static Future<void> init() async {
+  /// [requestPermission] must be false in the FCM background isolate: the
+  /// permission prompt needs an Activity, and without one the plugin throws
+  /// an NPE that aborts the rest of setup.
+  static Future<void> init({bool requestPermission = true}) async {
     if (!Platform.isAndroid) return;
     try {
       const settings = InitializationSettings(
@@ -95,6 +122,7 @@ class CallNotifications {
         onDidReceiveNotificationResponse: _handleResponse,
       );
 
+      if (!requestPermission) return;
       final android =
           _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
       await android?.requestNotificationsPermission();
@@ -130,9 +158,12 @@ class CallNotifications {
     ));
   }
 
+  /// [withSound] should be false whenever the app itself is ringing, which is
+  /// the case for every call that arrives over the socket.
   static Future<void> showIncomingCall({
     required String conversationId,
     required String peerUsername,
+    bool withSound = true,
   }) async {
     if (!Platform.isAndroid) return;
     try {
@@ -140,7 +171,9 @@ class CallNotifications {
         _incomingCallId,
         'Входящий звонок',
         peerUsername.isNotEmpty ? '@$peerUsername звонит вам' : 'Вам звонят',
-        const NotificationDetails(android: _incomingCallDetails),
+        NotificationDetails(
+          android: withSound ? _incomingCallDetails : _incomingCallSilentDetails,
+        ),
         payload: jsonEncode({
           'kind': 'call',
           'conversationId': conversationId,

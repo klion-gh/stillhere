@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 
 import 'app.dart';
 import 'core/call_notifications.dart';
 import 'core/desktop_notifications.dart';
 import 'core/desktop_shell.dart';
 import 'core/logger.dart';
+import 'core/push_service.dart';
 
 void main() {
   runZonedGuarded(() async {
@@ -23,10 +26,21 @@ void main() {
       return true;
     };
 
+    // The whole UI is Russian, and intl throws rather than falling back when
+    // asked for a locale it has no data for. An uncaught throw inside build()
+    // is replaced by a grey ErrorWidget that expands to fill the viewport —
+    // which is what a weekday-formatted chat timestamp used to do to the
+    // conversation list.
+    await initializeDateFormatting('ru');
+    Intl.defaultLocale = 'ru';
+
     await CallNotifications.init();
-    // Firebase isn't brought up here: which project to use comes from
-    // whichever node the user paired with, so setup happens once that's
-    // known (see NodeController.restorePushConfig).
+
+    // Push has to come up before the first frame, not once the node state
+    // resolves: the node's config is already on disk from pairing, and
+    // waiting on state meant a cold start silently skipped setup entirely —
+    // no FCM token, no background handler, no calls unless the app was open.
+    await PushService.restoreFromStorage();
 
     // Desktop: tray icon, close-to-tray, and native toasts. Must run before
     // the first frame so the close handler is in place from the start.

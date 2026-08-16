@@ -2,7 +2,7 @@
 <!-- The app is dark in every palette, so a white splash flashes on launch.
      Matching the midnight background makes the handoff to Flutter invisible. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@color/ic_launcher_background" />
+    <item android:drawable="@color/splash_background" />
 
     <item>
         <bitmap

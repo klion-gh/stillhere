@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -81,7 +82,7 @@ Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
 
   final data = message.data;
   AppLogger.info(_tag, 'background push: ${data['kind']}');
-  await CallNotifications.init();
+  await CallNotifications.init(requestPermission: false);
 
   if (data['kind'] == 'call') {
     await CallNotifications.showIncomingCall(
@@ -106,9 +107,34 @@ class PushService {
   static String? get token => _token;
   static bool get isAvailable => _token != null;
 
+  static Future<void> Function(String token)? _onTokenReady;
+
   /// Called when a token is issued or rotated, so the session layer can pass
   /// it to the node without this service knowing about auth.
-  static Future<void> Function(String token)? onTokenReady;
+  ///
+  /// Setup now runs before the first frame, so the token usually exists
+  /// before anything has a chance to subscribe. Assigning fires immediately
+  /// in that case — otherwise the token sits here and the node never learns
+  /// about the device.
+  static set onTokenReady(Future<void> Function(String token)? callback) {
+    _onTokenReady = callback;
+    final existing = _token;
+    if (callback != null && existing != null) unawaited(callback(existing));
+  }
+
+  /// Brings push up from the config stored at pairing time. Called on every
+  /// launch: registering the background handler is what lets a terminated app
+  /// be woken, and the handle Android stores for it goes stale on update, so
+  /// it has to be re-registered each run.
+  static Future<void> restoreFromStorage() async {
+    if (!Platform.isAndroid) return;
+    final stored = await loadStoredPushConfig();
+    if (stored == null) {
+      AppLogger.info(_tag, 'no stored push config; waiting for a node to pair');
+      return;
+    }
+    await configure(stored);
+  }
 
   /// Brings Firebase up using config the node supplied. Safe to call
   /// repeatedly; re-running with a different project (the user switched
@@ -138,14 +164,14 @@ class PushService {
             ? 'token acquired for project ${config.projectId}'
             : 'no token issued for project ${config.projectId}',
       );
-      if (_token != null) await onTokenReady?.call(_token!);
+      if (_token != null) await _onTokenReady?.call(_token!);
 
       // Tokens rotate (app data cleared, restored to a new device); the node
       // needs to hear about it or pushes silently stop arriving.
       messaging.onTokenRefresh.listen((fresh) async {
         AppLogger.info(_tag, 'token refreshed');
         _token = fresh;
-        await onTokenReady?.call(fresh);
+        await _onTokenReady?.call(fresh);
       });
     } catch (e, st) {
       // A device without Play Services, or a node whose Firebase project is

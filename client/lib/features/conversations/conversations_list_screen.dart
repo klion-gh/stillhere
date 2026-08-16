@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../core/appearance.dart';
 import '../../core/desktop_shell.dart';
@@ -14,6 +13,7 @@ import '../../widgets/gradient_avatar.dart';
 import '../auth/auth_controller.dart';
 import '../connect/node_controller.dart';
 import '../updates/update_dialog.dart';
+import 'chat_stamp.dart';
 import 'conversations_controller.dart';
 
 class ConversationsListScreen extends ConsumerWidget {
@@ -309,17 +309,6 @@ class _ConversationTile extends StatelessWidget {
     required this.onCall,
   });
 
-  /// Today shows a time, this week a weekday, older a date — the usual
-  /// messenger shorthand, so the column stays narrow.
-  String _stamp(DateTime at) {
-    final local = at.toLocal();
-    final now = DateTime.now();
-    final sameDay = local.year == now.year && local.month == now.month && local.day == now.day;
-    if (sameDay) return DateFormat.Hm().format(local);
-    if (now.difference(local).inDays < 7) return DateFormat.E('ru').format(local);
-    return DateFormat.yMd().format(local);
-  }
-
   @override
   Widget build(BuildContext context) {
     final peer = conversation.peer;
@@ -370,7 +359,7 @@ class _ConversationTile extends StatelessWidget {
                           ),
                           if (last != null)
                             Text(
-                              _stamp(last.createdAt),
+                              formatChatStamp(last.createdAt),
                               style: TextStyle(color: AppColors.textMuted, fontSize: 11.5),
                             ),
                         ],

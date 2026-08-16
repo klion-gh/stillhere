@@ -13,9 +13,23 @@ class RingtoneService {
   final AudioPlayer _player = AudioPlayer();
   bool _playing = false;
 
-  Future<void> _play(String asset, {required double volume}) async {
+  /// Routes the ring to the phone's ringer stream rather than media, so it
+  /// follows the ringer volume and stays silent when the phone is.
+  static final _ringContext = AudioContext(
+    android: const AudioContextAndroid(
+      usageType: AndroidUsageType.notificationRingtone,
+      contentType: AndroidContentType.sonification,
+      audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+      stayAwake: true,
+    ),
+  );
+
+  Future<void> _play(String asset, {required double volume, bool asRingtone = false}) async {
     if (_playing) await stop();
     try {
+      if (asRingtone && Platform.isAndroid) {
+        await _player.setAudioContext(_ringContext);
+      }
       await _player.setReleaseMode(ReleaseMode.loop);
       await _player.setVolume(volume);
       await _player.play(AssetSource(asset));
@@ -26,14 +40,11 @@ class RingtoneService {
     }
   }
 
-  /// On Android the incoming ring is played by the notification channel
-  /// instead — a backgrounded app often never gets audio focus, so the
-  /// notification is the only thing that reliably rings. Playing here too
-  /// would double it up.
-  Future<void> playIncoming() async {
-    if (Platform.isAndroid) return;
-    await _play('sounds/ring_incoming.mp3', volume: 1.0);
-  }
+  /// Android notification channels play their sound exactly once, which is
+  /// why the ring used to stop after a single pass. The notification is now
+  /// silent whenever the app is alive to ring for itself, and this loops
+  /// until the call is answered, declined or gives up.
+  Future<void> playIncoming() => _play('sounds/ring_incoming.mp3', volume: 1.0, asRingtone: true);
 
   Future<void> playOutgoing() => _play('sounds/ring_outgoing.wav', volume: 0.5);
 

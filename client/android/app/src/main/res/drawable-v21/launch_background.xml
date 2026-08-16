@@ -2,7 +2,7 @@
 <!-- Same splash as the pre-v21 drawable; the theme's colorBackground follows
      the system light/dark setting, which the app itself never does. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@color/ic_launcher_background" />
+    <item android:drawable="@color/splash_background" />
 
     <item>
         <bitmap
