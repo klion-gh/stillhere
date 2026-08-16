@@ -89,6 +89,45 @@ class AuthController extends AsyncNotifier<AuthState> {
     }
   }
 
+  /// Re-reads the signed-in user from the node, so an avatar change shows up
+  /// without a restart.
+  Future<void> refreshProfile() async {
+    final current = state.valueOrNull;
+    if (current?.user == null) return;
+    try {
+      final dio = ref.read(apiClientProvider);
+      final res = await dio.get('/users/me');
+      final user = AppUser.fromJson(res.data as Map<String, dynamic>);
+      state = AsyncValue.data(current!.copyWith(user: user));
+    } catch (e) {
+      AppLogger.warn(_tag, 'failed to refresh profile: $e');
+    }
+  }
+
+  /// Takes on the token pair issued when the tag changes. The tag is encoded
+  /// in the access token, so continuing with the old one would keep showing
+  /// the previous name until it expired.
+  Future<void> adoptRenamedSession({
+    required String username,
+    required String accessToken,
+    required String refreshToken,
+  }) async {
+    final current = state.valueOrNull;
+    if (current?.user == null) return;
+    final user = current!.user!.copyWith(username: username);
+
+    await ref.read(tokenStorageProvider).saveSession(
+          accessToken: accessToken,
+          refreshToken: refreshToken,
+          userId: user.id,
+          username: user.username,
+        );
+    state = AsyncValue.data(
+      current.copyWith(user: user, accessToken: accessToken, refreshToken: refreshToken),
+    );
+    AppLogger.info(_tag, 'username changed to @$username');
+  }
+
   /// Attempts to refresh the access token using the stored refresh token.
   /// Returns true on success. On failure, logs the user out.
   Future<bool> tryRefresh() async {
@@ -117,7 +156,14 @@ class AuthController extends AsyncNotifier<AuthState> {
   /// Tells the node this device should receive pushes for the signed-in
   /// user. Failing here only costs background delivery, so it never blocks
   /// or fails the session.
+  ///
+  /// Called from two directions because the two prerequisites — a signed-in
+  /// session and an issued FCM token — arrive in either order. On a cold
+  /// start with a saved session the session is restored first and the token
+  /// lands seconds later; on a fresh pair it's the other way round. Whichever
+  /// completes second does the actual registration.
   Future<void> registerPushToken() async {
+    if (!(state.valueOrNull?.isAuthenticated ?? false)) return;
     final token = PushService.token;
     if (token == null) return;
     try {

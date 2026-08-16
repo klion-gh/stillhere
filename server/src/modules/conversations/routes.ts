@@ -76,16 +76,47 @@ export async function conversationRoutes(app: FastifyInstance) {
   app.get("/conversations", { preHandler: app.authenticate }, async (request, reply) => {
     const conversations = await prisma.conversation.findMany({
       where: { OR: [{ userAId: request.userId }, { userBId: request.userId }] },
-      include: { userA: true, userB: true },
-      orderBy: { createdAt: "desc" },
+      include: {
+        userA: true,
+        userB: true,
+        // The list shows the last message rather than a timestamp, so it
+        // comes down with the conversation instead of costing a request per
+        // row.
+        messages: { orderBy: { createdAt: "desc" }, take: 1 },
+      },
     });
 
-    return reply.send(
-      conversations.map((c) => {
-        const peer = c.userA.id === request.userId ? c.userB : c.userA;
-        return { id: c.id, peer: { id: peer.id, username: peer.username }, createdAt: c.createdAt };
-      })
-    );
+    const payload = conversations.map((c) => {
+      const peer = c.userA.id === request.userId ? c.userB : c.userA;
+      const last = c.messages[0];
+      return {
+        id: c.id,
+        peer: {
+          id: peer.id,
+          username: peer.username,
+          hasAvatar: peer.avatar != null,
+          avatarUpdatedAt: peer.avatarUpdatedAt,
+        },
+        createdAt: c.createdAt,
+        lastMessage: last
+          ? {
+              content: last.content,
+              createdAt: last.createdAt,
+              fromMe: last.senderId === request.userId,
+            }
+          : null,
+      };
+    });
+
+    // Most recently active first — a list ordered by when a chat was created
+    // gets useless as soon as you have a few.
+    payload.sort((a, b) => {
+      const at = a.lastMessage?.createdAt ?? a.createdAt;
+      const bt = b.lastMessage?.createdAt ?? b.createdAt;
+      return bt.getTime() - at.getTime();
+    });
+
+    return reply.send(payload);
   });
 
   app.get("/conversations/:id/messages", { preHandler: app.authenticate }, async (request, reply) => {

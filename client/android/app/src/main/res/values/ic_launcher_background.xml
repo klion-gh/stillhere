@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Adaptive icons can't use a gradient drawable as the background layer
+         on every launcher, so the flat midnight background is used instead. -->
+    <color name="ic_launcher_background">#141026</color>
+</resources>

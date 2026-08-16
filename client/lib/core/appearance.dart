@@ -154,7 +154,7 @@ class AppPalette {
 }
 
 /// Animated backdrop behind the full-screen flows and chat list.
-enum AppBackgroundId { plain, orbs, aurora, stars }
+enum AppBackgroundId { plain, orbs, aurora, stars, mesh, meteors, waves, embers }
 
 class AppBackgroundOption {
   final AppBackgroundId id;
@@ -168,6 +168,10 @@ class AppBackgroundOption {
     AppBackgroundOption(id: AppBackgroundId.orbs, name: 'Сферы', description: 'Плавно плывущие пятна света'),
     AppBackgroundOption(id: AppBackgroundId.aurora, name: 'Сияние', description: 'Мягкие переливы, как северное сияние'),
     AppBackgroundOption(id: AppBackgroundId.stars, name: 'Звёзды', description: 'Медленное мерцание звёзд'),
+    AppBackgroundOption(id: AppBackgroundId.mesh, name: 'Сеть', description: 'Точки, соединённые тонкими линиями'),
+    AppBackgroundOption(id: AppBackgroundId.meteors, name: 'Метеоры', description: 'Редкие световые росчерки'),
+    AppBackgroundOption(id: AppBackgroundId.waves, name: 'Волны', description: 'Мягкие перекатывающиеся слои'),
+    AppBackgroundOption(id: AppBackgroundId.embers, name: 'Искры', description: 'Медленно поднимающиеся огоньки'),
   ];
 }
 
@@ -230,3 +234,12 @@ class AppearanceController extends StateNotifier<AppearanceState> {
 
 final appearanceProvider =
     StateNotifierProvider<AppearanceController, AppearanceState>((ref) => AppearanceController());
+
+/// Subscribes a screen to palette changes.
+///
+/// Colours live on [AppColors] as mutable statics rather than in the Theme,
+/// so widgets that read them have no dependency Flutter can track — changing
+/// the palette repainted the backdrop but left buttons and tiles on the old
+/// colours until the app restarted. Calling this in a build method gives the
+/// screen the missing dependency.
+void watchPalette(WidgetRef ref) => ref.watch(appearanceProvider);

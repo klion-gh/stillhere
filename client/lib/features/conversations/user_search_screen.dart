@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/appearance.dart';
 import '../../core/theme.dart';
 import '../../models/user.dart';
 import '../../widgets/gradient_avatar.dart';
@@ -52,6 +53,9 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Colours come from AppColors statics, which Flutter can't track;
+    // this makes the screen rebuild when the palette changes.
+    watchPalette(ref);
     return Scaffold(
       appBar: AppBar(title: const Text('Найти по тегу')),
       extendBodyBehindAppBar: true,

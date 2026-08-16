@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/appearance.dart';
 import '../../core/theme.dart';
 import '../../widgets/gradient_avatar.dart';
 import 'call_controller.dart';
@@ -98,6 +99,9 @@ class CallScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Colours come from AppColors statics, which Flutter can't track;
+    // this makes the screen rebuild when the palette changes.
+    watchPalette(ref);
     final args = CallArgs(conversationId: conversationId, peerUsername: peerUsername, isOutgoing: isOutgoing);
     final callState = ref.watch(callControllerProvider(args));
     final controller = ref.read(callControllerProvider(args).notifier);

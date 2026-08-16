@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/appearance.dart';
 import '../../core/desktop_shell.dart';
 import '../../core/providers.dart';
 import '../../core/theme.dart';
 import '../../core/update_checker.dart';
+import '../../models/conversation.dart';
+import '../../models/user.dart';
 import '../../widgets/gradient_avatar.dart';
 import '../auth/auth_controller.dart';
 import '../connect/node_controller.dart';
@@ -18,8 +21,11 @@ class ConversationsListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Colours come from AppColors statics, which Flutter can't track;
+    // this makes the screen rebuild when the palette changes.
+    watchPalette(ref);
     final conversationsAsync = ref.watch(conversationsProvider);
-    final username = ref.watch(authControllerProvider).valueOrNull?.user?.username;
+    final me = ref.watch(authControllerProvider).valueOrNull?.user;
     final updateInfo = ref.watch(updateCheckProvider).valueOrNull;
     // No value yet means we're still on the initial connect — don't flash a
     // warning before the first attempt has even resolved.
@@ -31,12 +37,13 @@ class ConversationsListScreen extends ConsumerWidget {
           child: Column(
             children: [
               _Header(
-                username: username,
+                me: me,
                 updateInfo: updateInfo,
                 onUpdateTap: updateInfo == null ? null : () => UpdateDialog.show(context, updateInfo),
                 onLogout: () => ref.read(authControllerProvider.notifier).logout(),
                 onSwitchServer: () => ref.read(nodeControllerProvider.notifier).disconnect(),
                 onAppearance: () => context.push('/appearance'),
+                onProfile: () => context.push('/profile'),
               ),
               if (!wsConnected) const _OfflineBanner(),
               Expanded(
@@ -69,8 +76,7 @@ class ConversationsListScreen extends ConsumerWidget {
                         itemBuilder: (context, index) {
                           final c = conversations[index];
                           return _ConversationTile(
-                            username: c.peer.username,
-                            subtitle: DateFormat.yMMMd().add_Hm().format(c.createdAt.toLocal()),
+                            conversation: c,
                             onTap: () => context.push('/chat/${c.id}', extra: c.peer.username),
                             onCall: () =>
                                 context.push('/call/${c.id}?peer=${c.peer.username}&outgoing=true'),
@@ -97,29 +103,49 @@ class ConversationsListScreen extends ConsumerWidget {
 }
 
 class _Header extends StatelessWidget {
-  final String? username;
+  final AppUser? me;
   final UpdateInfo? updateInfo;
   final VoidCallback? onUpdateTap;
   final VoidCallback onLogout;
   final VoidCallback onSwitchServer;
   final VoidCallback onAppearance;
+  final VoidCallback onProfile;
 
   const _Header({
-    required this.username,
+    required this.me,
     required this.updateInfo,
     required this.onUpdateTap,
     required this.onLogout,
     required this.onSwitchServer,
     required this.onAppearance,
+    required this.onProfile,
   });
 
   @override
   Widget build(BuildContext context) {
+    final username = me?.username;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 12, 16),
       child: Row(
         children: [
-          if (username != null) GradientAvatar(username: username!, size: 44),
+          if (me != null)
+            // Doubles as the way into the profile — the usual place to look
+            // for it.
+            Material(
+              color: Colors.transparent,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onProfile,
+                child: GradientAvatar(
+                  username: me!.username,
+                  size: 44,
+                  userId: me!.id,
+                  hasAvatar: me!.hasAvatar,
+                  avatarUpdatedAt: me!.avatarUpdatedAt,
+                ),
+              ),
+            ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -273,20 +299,32 @@ class _OfflineBanner extends StatelessWidget {
 }
 
 class _ConversationTile extends StatelessWidget {
-  final String username;
-  final String subtitle;
+  final Conversation conversation;
   final VoidCallback onTap;
   final VoidCallback onCall;
 
   const _ConversationTile({
-    required this.username,
-    required this.subtitle,
+    required this.conversation,
     required this.onTap,
     required this.onCall,
   });
 
+  /// Today shows a time, this week a weekday, older a date — the usual
+  /// messenger shorthand, so the column stays narrow.
+  String _stamp(DateTime at) {
+    final local = at.toLocal();
+    final now = DateTime.now();
+    final sameDay = local.year == now.year && local.month == now.month && local.day == now.day;
+    if (sameDay) return DateFormat.Hm().format(local);
+    if (now.difference(local).inDays < 7) return DateFormat.E('ru').format(local);
+    return DateFormat.yMd().format(local);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final peer = conversation.peer;
+    final last = conversation.lastMessage;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
@@ -303,29 +341,65 @@ class _ConversationTile extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
               children: [
-                GradientAvatar(username: username, size: 48),
+                GradientAvatar(
+                  username: peer.username,
+                  size: 48,
+                  userId: peer.id,
+                  hasAvatar: peer.hasAvatar,
+                  avatarUpdatedAt: peer.avatarUpdatedAt,
+                ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        '@$username',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '@${peer.username}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          if (last != null)
+                            Text(
+                              _stamp(last.createdAt),
+                              style: TextStyle(color: AppColors.textMuted, fontSize: 11.5),
+                            ),
+                        ],
                       ),
                       const SizedBox(height: 3),
-                      Text(
-                        subtitle,
-                        style: TextStyle(color: AppColors.textMuted, fontSize: 12.5),
+                      Row(
+                        children: [
+                          if (last?.fromMe ?? false) ...[
+                            Icon(Icons.done_all_rounded, size: 14, color: AppColors.textMuted),
+                            const SizedBox(width: 4),
+                          ],
+                          Expanded(
+                            child: Text(
+                              last?.content ?? 'Нет сообщений',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: last == null ? AppColors.textMuted : AppColors.textSecondary,
+                                fontSize: 13,
+                                fontStyle: last == null ? FontStyle.italic : FontStyle.normal,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(width: 6),
                 IconButton(
                   onPressed: onCall,
                   tooltip: 'Позвонить',

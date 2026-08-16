@@ -21,6 +21,13 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
 
+  // Avatars are small (re-encoded and size-capped on upload), so keeping the
+  // bytes in the row avoids a shared volume and keeps a node one container
+  // plus one database.
+  avatar      Bytes?
+  avatarMime  String?
+  avatarUpdatedAt DateTime?
+
   conversationsAsA Conversation[] @relation("ConversationUserA")
   conversationsAsB Conversation[] @relation("ConversationUserB")
   messages         Message[]

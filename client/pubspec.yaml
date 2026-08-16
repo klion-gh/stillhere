@@ -4,7 +4,7 @@ publish_to: "none"
 # The +N build number becomes Android's versionCode. It must increase on
 # every release — Android compares versionCode (not the name) when deciding
 # whether an APK is an update, and refuses to install a lower one.
-version: 0.10.0+10
+version: 0.11.0+11
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -25,6 +25,10 @@ dependencies:
   audioplayers: ^6.1.0
   path_provider: ^2.1.4
   open_filex: ^4.5.0
+  # Works on Android and Windows alike, unlike image_picker which has no
+  # desktop implementation.
+  file_selector: ^1.0.3
+  image: ^4.3.0
   firebase_core: ^3.8.0
   firebase_messaging: ^15.1.5
   window_manager: ^0.4.3

@@ -10,7 +10,7 @@
 ; Output: dist\stillhere.exe
 
 #define MyAppName "StillHere"
-#define MyAppVersion "0.10.0"
+#define MyAppVersion "0.11.0"
 #define MyAppPublisher "StillHere"
 #define MyAppExeName "stillhere.exe"
 #define SourceDir "..\..\build\windows\x64\runner\Release"
@@ -31,6 +31,9 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#MyAppExeName}
+; The installer is its own executable, so it doesn't inherit the app's icon —
+; without this the file people download shows Inno's default.
+SetupIconFile=stillhere.ico
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

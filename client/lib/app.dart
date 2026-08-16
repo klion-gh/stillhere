@@ -8,6 +8,7 @@ import 'core/call_notifications.dart';
 import 'core/desktop_notifications.dart';
 import 'core/incoming_call.dart';
 import 'core/providers.dart';
+import 'core/push_service.dart';
 import 'core/router.dart';
 import 'core/theme.dart';
 import 'features/auth/auth_controller.dart';
@@ -34,6 +35,14 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
     // is anywhere in the app — or nowhere, with it backgrounded.
     _wsSub = ref.read(wsClientProvider).events.listen(_handleWsEvent);
     CallNotifications.onCallAction = _handleCallNotificationAction;
+
+    // A token can be issued long after the session is restored, so register
+    // it whenever it arrives rather than only on the login transition —
+    // otherwise a cold start with a saved session never tells the node about
+    // this device, and calls stop arriving unless the app is already open.
+    PushService.onTokenReady = (_) async {
+      await ref.read(authControllerProvider.notifier).registerPushToken();
+    };
 
     // Bring push up for a node paired in an earlier session; the project to
     // use is the node's, not something baked into this build.
@@ -124,6 +133,20 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
         // never added them.
         unawaited(ref.read(conversationsProvider.notifier).refresh());
         break;
+      case 'message:ack':
+        // Our own message: keep the list preview in step with what we sent.
+        _applyMessageToList(event, fromMe: true);
+        break;
+      case 'peer:updated':
+        final userId = event['userId'] as String?;
+        final username = event['username'] as String?;
+        if (userId != null && username != null) {
+          ref.read(conversationsProvider.notifier).applyPeerRename(
+                userId: userId,
+                username: username,
+              );
+        }
+        break;
     }
   }
 
@@ -166,11 +189,31 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
     ref.read(routerProvider).push('/call/$conversationId?peer=$peerUsername&outgoing=false');
   }
 
+  /// Keeps the conversation list's preview and ordering current without
+  /// refetching it for every message.
+  void _applyMessageToList(Map<String, dynamic> event, {required bool fromMe}) {
+    final message = event['message'] as Map<String, dynamic>?;
+    if (message == null) return;
+    final conversationId = message['conversationId'] as String?;
+    final content = message['content'] as String?;
+    final createdAt = message['createdAt'] as String?;
+    if (conversationId == null || content == null || createdAt == null) return;
+
+    ref.read(conversationsProvider.notifier).applyIncomingMessage(
+          conversationId: conversationId,
+          content: content,
+          createdAt: DateTime.tryParse(createdAt) ?? DateTime.now(),
+          fromMe: fromMe,
+        );
+  }
+
   void _handleIncomingMessage(Map<String, dynamic> event) {
     final message = event['message'] as Map<String, dynamic>?;
     if (message == null) return;
     final conversationId = message['conversationId'] as String?;
     if (conversationId == null) return;
+
+    _applyMessageToList(event, fromMe: false);
 
     final senderUsername =
         (event['senderUsername'] as String?) ?? _resolvePeerUsername(conversationId) ?? 'Сообщение';

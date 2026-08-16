@@ -12,6 +12,7 @@ import '../features/connect/connect_screen.dart';
 import '../features/connect/node_controller.dart';
 import '../features/conversations/conversations_list_screen.dart';
 import '../features/conversations/user_search_screen.dart';
+import '../features/profile/profile_screen.dart';
 
 class _RouterRefreshNotifier extends ChangeNotifier {
   _RouterRefreshNotifier(Ref ref) {
@@ -55,6 +56,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/conversations', builder: (context, state) => const ConversationsListScreen()),
       GoRoute(path: '/search', builder: (context, state) => const UserSearchScreen()),
       GoRoute(path: '/appearance', builder: (context, state) => const AppearanceScreen()),
+      GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
       GoRoute(
         path: '/chat/:conversationId',
         builder: (context, state) => ChatScreen(

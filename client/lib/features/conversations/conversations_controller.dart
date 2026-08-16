@@ -40,4 +40,35 @@ class ConversationsController extends AsyncNotifier<List<Conversation>> {
     await refresh();
     return conversation;
   }
+
+  /// Moves a conversation to the top with its new preview, without refetching
+  /// the whole list on every message.
+  void applyIncomingMessage({
+    required String conversationId,
+    required String content,
+    required DateTime createdAt,
+    required bool fromMe,
+  }) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+
+    final index = current.indexWhere((c) => c.id == conversationId);
+    if (index < 0) return;
+
+    final updated = current[index].copyWith(
+      lastMessage: LastMessage(content: content, createdAt: createdAt, fromMe: fromMe),
+    );
+    final rest = [...current]..removeAt(index);
+    state = AsyncValue.data([updated, ...rest]);
+  }
+
+  /// A peer changed their tag; reflect it without a round trip.
+  void applyPeerRename({required String userId, required String username}) {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    state = AsyncValue.data([
+      for (final c in current)
+        c.peer.id == userId ? c.copyWith(peer: c.peer.copyWith(username: username)) : c,
+    ]);
+  }
 }

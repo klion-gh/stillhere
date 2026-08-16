@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/appearance.dart';
 import '../../core/theme.dart';
 import '../../widgets/error_banner.dart';
 import '../../widgets/gradient_avatar.dart';
@@ -55,6 +56,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Colours come from AppColors statics, which Flutter can't track;
+    // this makes the screen rebuild when the palette changes.
+    watchPalette(ref);
     final typedTag = _usernameController.text.trim();
 
     return Scaffold(

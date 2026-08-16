@@ -34,7 +34,7 @@ class ErrorBanner extends StatelessWidget {
   }
 }
 
-/// The app's logo mark — gradient rounded square with a glow.
+/// The app's logo mark — the cyber dove over a soft glow.
 class BrandMark extends StatelessWidget {
   final double size;
 
@@ -43,22 +43,35 @@ class BrandMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Container(
+      child: SizedBox(
         width: size,
         height: size,
-        decoration: BoxDecoration(
-          gradient: AppColors.brandGradient,
-          borderRadius: BorderRadius.circular(size * 0.31),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.4),
-              blurRadius: size * 0.38,
-              spreadRadius: 2,
-              offset: Offset(0, size * 0.1),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // The logo is a cut-out rather than a filled tile, so a box shadow
+            // would trace its bounding square. A radial glow sits behind it
+            // instead and picks up the palette.
+            DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.primary.withValues(alpha: 0.34),
+                    AppColors.primary.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+              child: SizedBox(width: size, height: size),
+            ),
+            Image.asset(
+              'assets/icons/logo.png',
+              width: size * 0.94,
+              height: size * 0.94,
+              filterQuality: FilterQuality.medium,
             ),
           ],
         ),
-        child: Icon(Icons.bolt_rounded, color: Colors.white, size: size * 0.52),
       ),
     );
   }

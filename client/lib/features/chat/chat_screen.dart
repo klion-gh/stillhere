@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/appearance.dart';
 import '../../core/call_notifications.dart';
 import '../../core/incoming_call.dart';
 import '../../core/theme.dart';
@@ -78,6 +79,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Colours come from AppColors statics, which Flutter can't track;
+    // this makes the screen rebuild when the palette changes.
+    watchPalette(ref);
     final myId = ref.watch(authControllerProvider).valueOrNull?.user?.id;
     final messagesAsync = ref.watch(chatControllerProvider(widget.conversationId));
     final peer = widget.peerUsername ?? '';
