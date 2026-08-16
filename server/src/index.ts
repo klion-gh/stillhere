@@ -11,6 +11,8 @@ import { conversationRoutes } from "./modules/conversations/routes.js";
 import { callRoutes } from "./modules/calls/routes.js";
 import { nodeRoutes } from "./modules/node/routes.js";
 import { bootstrapNodeConfig } from "./modules/node/bootstrap.js";
+import { pushRoutes } from "./modules/push/routes.js";
+import { initPush } from "./modules/push/firebase.js";
 import { wsGateway } from "./ws/gateway.js";
 
 const app = Fastify({ logger: true });
@@ -27,7 +29,10 @@ await app.register(authRoutes);
 await app.register(userRoutes);
 await app.register(conversationRoutes);
 await app.register(callRoutes);
+await app.register(pushRoutes);
 await app.register(wsGateway);
+
+initPush(app.log);
 
 try {
   await bootstrapNodeConfig();

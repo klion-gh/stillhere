@@ -38,6 +38,13 @@ services:
       NODE_TOKEN_SECRET: ${NODE_TOKEN_SECRET}
       NODE_TOKEN_TTL: ${NODE_TOKEN_TTL}
       NODE_SETUP_PASSWORD: ${NODE_SETUP_PASSWORD}
+      # Empty unless secrets/firebase-service-account.json exists; the server
+      # treats push as optional and just logs that it's disabled.
+      FIREBASE_SERVICE_ACCOUNT_FILE: ${FIREBASE_SERVICE_ACCOUNT_FILE}
+    volumes:
+      # Mounted rather than baked into the image — it's a credential, and it
+      # must never end up in a layer that could be pushed to a registry.
+      - ./secrets:/run/secrets:ro
     expose:
       - "3000"
 

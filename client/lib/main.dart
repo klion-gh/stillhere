@@ -6,10 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
 import 'core/call_notifications.dart';
-import 'core/connection_service.dart';
 import 'core/desktop_notifications.dart';
 import 'core/desktop_shell.dart';
 import 'core/logger.dart';
+import 'core/push_service.dart';
 
 void main() {
   runZonedGuarded(() async {
@@ -25,7 +25,10 @@ void main() {
     };
 
     await CallNotifications.init();
-    ConnectionService.init();
+    // Push replaces the old always-on foreground service on Android: the
+    // system wakes us for calls and messages instead of us holding a socket
+    // (and a permanent notification) open around the clock.
+    await PushService.init();
 
     // Desktop: tray icon, close-to-tray, and native toasts. Must run before
     // the first frame so the close handler is in place from the start.

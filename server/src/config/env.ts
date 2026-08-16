@@ -17,6 +17,9 @@ const envSchema = z.object({
   // Only consumed once, on first boot, to bootstrap NodeConfig.passwordHash.
   // Safe to leave set in .env afterward — ignored once the row exists.
   NODE_SETUP_PASSWORD: z.string().optional(),
+  // Path to a Firebase service account JSON. Optional: without it the node
+  // still works, it just can't wake devices that aren't connected.
+  FIREBASE_SERVICE_ACCOUNT_FILE: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

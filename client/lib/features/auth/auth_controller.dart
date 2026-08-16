@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api_client.dart';
 import '../../core/logger.dart';
 import '../../core/providers.dart';
+import '../../core/push_service.dart';
 import '../../models/user.dart';
 import '../connect/node_client.dart';
 import 'auth_state.dart';
@@ -112,8 +114,37 @@ class AuthController extends AsyncNotifier<AuthState> {
     }
   }
 
+  /// Tells the node this device should receive pushes for the signed-in
+  /// user. Failing here only costs background delivery, so it never blocks
+  /// or fails the session.
+  Future<void> registerPushToken() async {
+    final token = PushService.token;
+    if (token == null) return;
+    try {
+      final dio = ref.read(apiClientProvider);
+      await dio.post('/devices/register', data: {'token': token, 'platform': 'android'});
+      AppLogger.info(_tag, 'push token registered with node');
+    } catch (e) {
+      AppLogger.warn(_tag, 'failed to register push token: $e');
+    }
+  }
+
   Future<void> logout() async {
     AppLogger.info(_tag, 'logging out');
+
+    // Unregister before dropping the tokens — afterwards the request can no
+    // longer authenticate, and the node would keep pushing this user's calls
+    // to a device that's signed out.
+    final pushToken = PushService.token;
+    if (pushToken != null) {
+      try {
+        final dio = ref.read(apiClientProvider);
+        await dio.post('/devices/unregister', data: {'token': pushToken});
+      } catch (e) {
+        AppLogger.warn(_tag, 'failed to unregister push token: $e');
+      }
+    }
+
     await ref.read(tokenStorageProvider).clear();
     ref.read(wsClientProvider).disconnect();
     state = const AsyncValue.data(AuthState());

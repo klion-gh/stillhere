@@ -8,10 +8,6 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- Android 14+ requires declaring why the service runs in the
-         foreground; ours exists to keep the connection up for calls. -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- Lets the app hand a downloaded release APK to the system installer
          for in-app updates. This only grants the right to ask; the user
          still approves "install from this source" once. -->
@@ -48,12 +44,11 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Keeps the process (and therefore the WebSocket) alive in the
-             background so calls and messages still arrive. -->
-        <service
-            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
-            android:foregroundServiceType="dataSync"
-            android:exported="false" />
+        <!-- Route incoming pushes to the call channel so a call still rings
+             with its own sound when the app was killed. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="incoming_calls_v2" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

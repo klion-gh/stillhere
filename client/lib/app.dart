@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/appearance.dart';
 import 'core/call_notifications.dart';
-import 'core/connection_service.dart';
 import 'core/desktop_notifications.dart';
 import 'core/incoming_call.dart';
 import 'core/providers.dart';
@@ -230,7 +229,7 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
       if (isAuthenticated && userToken != null && !wasAuthenticated) {
         final node = ref.read(nodeControllerProvider).valueOrNull;
         if (node != null && node.host != null && node.nodeToken != null) {
-          unawaited(ConnectionService.start());
+          unawaited(ref.read(authControllerProvider.notifier).registerPushToken());
           ref.read(wsClientProvider).connect(
                 host: node.host!,
                 nodeToken: node.nodeToken!,
@@ -248,7 +247,6 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
         }
       } else if (!isAuthenticated && wasAuthenticated) {
         ref.read(wsClientProvider).disconnect();
-        unawaited(ConnectionService.stop());
       }
     });
 

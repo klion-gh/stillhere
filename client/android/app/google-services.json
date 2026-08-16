@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "268490656564",
+    "project_id": "stillhere-e5d6f",
+    "storage_bucket": "stillhere-e5d6f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:268490656564:android:3f95d913398b3765383361",
+        "android_client_info": {
+          "package_name": "com.stillhere.stillhere"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBY4rDFMu28TVJ9oUAN26PAr36XiyfWurI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -5,6 +5,8 @@ import { prisma } from "../db/prisma.js";
 import { verifyAccessToken } from "../modules/auth/tokens.js";
 import { verifyNodeToken } from "../modules/node/tokens.js";
 import { addConnection, removeConnection, sendToUser, isOnline, startHeartbeat } from "./connections.js";
+import { sendToUserDevices, isPushEnabled } from "../modules/push/firebase.js";
+import { holdCallOffer, takePendingCall, dropPendingCall, sweepExpiredCalls } from "./pending_calls.js";
 
 const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("message:send"), conversationId: z.string(), content: z.string().min(1).max(4000), clientId: z.string().optional() }),
@@ -42,7 +44,12 @@ export async function wsGateway(app: FastifyInstance) {
   const log: FastifyBaseLogger = app.log;
 
   const stopHeartbeat = startHeartbeat(log);
-  app.addHook("onClose", async () => stopHeartbeat());
+  const sweeper = setInterval(sweepExpiredCalls, 60_000);
+  sweeper.unref?.();
+  app.addHook("onClose", async () => {
+    stopHeartbeat();
+    clearInterval(sweeper);
+  });
 
   app.get("/ws", { websocket: true }, (socket: WebSocket, request) => {
     const { token, nodeToken } = request.query as { token?: string; nodeToken?: string };
@@ -81,6 +88,14 @@ export async function wsGateway(app: FastifyInstance) {
     log.info({ userId }, "ws: connected");
     addConnection(userId, socket);
     void broadcastPresence(userId, "online");
+
+    // If a call woke this device, the offer has been waiting for the socket
+    // to exist. Hand it over now.
+    const parked = takePendingCall(userId);
+    if (parked) {
+      log.info({ userId }, "ws: delivering call offer held while device was offline");
+      sendToUser(userId, parked);
+    }
 
     socket.on("message", (raw: Buffer) => {
       void (async () => {
@@ -126,6 +141,22 @@ export async function wsGateway(app: FastifyInstance) {
           log.info({ userId, peerId, conversationId: msg.conversationId, delivered }, "ws: message relayed");
           if (delivered) {
             saved = await prisma.message.update({ where: { id: saved.id }, data: { deliveredAt: new Date() } });
+          } else {
+            // Not connected: wake their device so the message shows up now
+            // rather than whenever they next open the app.
+            void sendToUserDevices(
+              peerId,
+              {
+                urgent: false,
+                data: {
+                  kind: "message",
+                  conversationId: msg.conversationId,
+                  senderUsername: username,
+                  preview: msg.content.slice(0, 180),
+                },
+              },
+              log,
+            );
           }
           sendToUser(userId, { type: "message:ack", message: saved, clientId: msg.clientId, delivered });
           return;
@@ -139,11 +170,40 @@ export async function wsGateway(app: FastifyInstance) {
           log.info({ userId, peerId, conversationId: msg.conversationId, type: msg.type, delivered }, "ws: call signal relayed");
         }
 
-        // Tell the caller immediately instead of letting them listen to a
-        // ringback for a peer who was never reachable.
+        // A caller hanging up should clear anything parked for the callee,
+        // or they'd get a phantom incoming call on next connect.
+        if (msg.type === "call:end") {
+          dropPendingCall(peerId, msg.conversationId);
+        }
+
         if (!delivered && msg.type === "call:offer") {
-          sendToUser(userId, { type: "call:unavailable", conversationId: msg.conversationId });
-          log.warn({ userId, peerId, conversationId: msg.conversationId }, "ws: callee offline, offer not delivered");
+          const relayed = { ...msg, from: userId };
+          const woken = await sendToUserDevices(
+            peerId,
+            {
+              urgent: true,
+              data: {
+                kind: "call",
+                conversationId: msg.conversationId,
+                callerUsername: username,
+              },
+            },
+            log,
+          );
+
+          if (woken > 0) {
+            // Park the offer: the device is starting up and its socket
+            // doesn't exist yet, so there's nothing to deliver to for another
+            // second or two.
+            holdCallOffer(peerId, msg.conversationId, relayed);
+            log.info({ userId, peerId, conversationId: msg.conversationId }, "ws: callee offline, woken by push");
+          } else {
+            sendToUser(userId, { type: "call:unavailable", conversationId: msg.conversationId });
+            log.warn(
+              { userId, peerId, conversationId: msg.conversationId, pushEnabled: isPushEnabled() },
+              "ws: callee unreachable, offer not delivered",
+            );
+          }
         }
       })();
     });

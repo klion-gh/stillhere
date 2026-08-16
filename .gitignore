@@ -16,3 +16,10 @@ client/build/
 client/android/.gradle/
 client/windows/flutter/ephemeral/
 client/**/ephemeral/
+
+# Firebase service account key — grants the right to push to every user of
+# the app. Lives outside the repo; the server reads it from a mounted file.
+**/firebase-service-account.json
+**/*-firebase-adminsdk-*.json
+docker/secrets/*
+!docker/secrets/.gitkeep
