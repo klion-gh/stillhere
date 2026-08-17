@@ -44,6 +44,14 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Required by flutter_local_notifications for the accept/decline
+             buttons on the call notification. It isn't declared by the plugin
+             itself, and without it the taps go nowhere at all — no callback,
+             no error, the buttons simply do nothing. -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
+            android:exported="false" />
+
         <!-- Route incoming pushes to the call channel so a call still rings
              with its own sound when the app was killed. -->
         <meta-data

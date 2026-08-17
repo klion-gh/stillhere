@@ -57,6 +57,12 @@ android {
 
     buildTypes {
         release {
+            // Without these, R8 strips the generic signatures Gson needs and
+            // notification handling fails at runtime in release builds only.
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
             } else {

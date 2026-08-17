@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { normalizeUsername } from "../users/username.js";
+import { publicUser } from "../users/public_user.js";
 import { sendToUser } from "../../ws/connections.js";
 
 const createConversationSchema = z.object({
@@ -59,7 +60,7 @@ export async function conversationRoutes(app: FastifyInstance) {
         type: "conversation:new",
         conversation: {
           id: conversation.id,
-          peer: { id: self.id, username: self.username },
+          peer: publicUser(self),
           createdAt: conversation.createdAt,
         },
       });
@@ -68,7 +69,7 @@ export async function conversationRoutes(app: FastifyInstance) {
 
     return reply.send({
       id: conversation.id,
-      peer: { id: peer.id, username: peer.username },
+      peer: publicUser(peer),
       createdAt: conversation.createdAt,
     });
   });
@@ -91,12 +92,7 @@ export async function conversationRoutes(app: FastifyInstance) {
       const last = c.messages[0];
       return {
         id: c.id,
-        peer: {
-          id: peer.id,
-          username: peer.username,
-          hasAvatar: peer.avatar != null,
-          avatarUpdatedAt: peer.avatarUpdatedAt,
-        },
+        peer: publicUser(peer),
         createdAt: c.createdAt,
         lastMessage: last
           ? {

@@ -13,6 +13,8 @@ import { callRoutes } from "./modules/calls/routes.js";
 import { nodeRoutes } from "./modules/node/routes.js";
 import { bootstrapNodeConfig } from "./modules/node/bootstrap.js";
 import { pushRoutes } from "./modules/push/routes.js";
+import { diagnosticsRoutes, startDiagnosticsWatcher } from "./modules/diagnostics/routes.js";
+import { loadDiagnosticsState, startDiagnosticsPruner } from "./modules/diagnostics/store.js";
 import { initPush } from "./modules/push/firebase.js";
 import { wsGateway } from "./ws/gateway.js";
 
@@ -37,12 +39,21 @@ await app.register(profileRoutes);
 await app.register(conversationRoutes);
 await app.register(callRoutes);
 await app.register(pushRoutes);
+await app.register(diagnosticsRoutes);
 await app.register(wsGateway);
 
 initPush(app.log);
 
 try {
   await bootstrapNodeConfig();
+
+  // Diagnostics are off unless an operator switched them on, and whatever was
+  // recorded expires on its own — the pruner runs either way.
+  const recording = await loadDiagnosticsState();
+  app.log.info({ recording }, "diagnostics: state loaded");
+  startDiagnosticsPruner(app.log);
+  startDiagnosticsWatcher(app.log);
+
   await app.listen({ port: env.PORT, host: env.HOST });
 } catch (err) {
   app.log.error(err);

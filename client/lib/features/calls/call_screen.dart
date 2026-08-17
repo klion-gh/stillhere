@@ -6,7 +6,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/appearance.dart';
 import '../../core/theme.dart';
+import '../../models/user.dart';
 import '../../widgets/gradient_avatar.dart';
+import '../conversations/conversations_controller.dart';
 import 'call_controller.dart';
 
 class CallScreen extends ConsumerWidget {
@@ -104,6 +106,9 @@ class CallScreen extends ConsumerWidget {
     watchPalette(ref);
     final args = CallArgs(conversationId: conversationId, peerUsername: peerUsername, isOutgoing: isOutgoing);
     final callState = ref.watch(callControllerProvider(args));
+    // The route only carries the tag, so the picture comes from the loaded
+    // conversation.
+    final peer = ref.watch(conversationPeerProvider(conversationId));
     final controller = ref.read(callControllerProvider(args).notifier);
 
     ref.listen(callControllerProvider(args), (previous, next) {
@@ -142,7 +147,7 @@ class CallScreen extends ConsumerWidget {
                           size: 190,
                           opacity: isRinging ? 0.4 : 0.22,
                         ),
-                        _PulsingAvatar(username: peerUsername, animate: isRinging),
+                        _PulsingAvatar(peer: peer, fallbackUsername: peerUsername, animate: isRinging),
                       ],
                     ),
                   ),
@@ -304,10 +309,15 @@ class _PingChip extends StatelessWidget {
 }
 
 class _PulsingAvatar extends StatefulWidget {
-  final String username;
+  final AppUser? peer;
+  final String fallbackUsername;
   final bool animate;
 
-  const _PulsingAvatar({required this.username, required this.animate});
+  const _PulsingAvatar({
+    required this.peer,
+    required this.fallbackUsername,
+    required this.animate,
+  });
 
   @override
   State<_PulsingAvatar> createState() => _PulsingAvatarState();
@@ -350,7 +360,7 @@ class _PulsingAvatarState extends State<_PulsingAvatar> with SingleTickerProvide
         final scale = 1.0 + (_controller.value * 0.06);
         return Transform.scale(scale: scale, child: child);
       },
-      child: GradientAvatar(username: widget.username, size: 128, showPulse: true),
+      child: GradientAvatar.of(widget.peer, fallbackUsername: widget.fallbackUsername, size: 128, showPulse: true),
     );
   }
 }

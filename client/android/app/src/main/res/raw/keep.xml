@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The call ringtone is only ever referenced by name from Dart, so Android's
-  resource shrinker has no way to see that it's used and would strip it from
-  release builds — leaving incoming calls silent. This pins it explicitly.
+  These are only ever referenced by name from Dart, so Android's resource
+  shrinker has no way to see that they're used and strips them from release
+  builds. Verify after changing this list:
+
+    aapt2 dump resources build/app/outputs/flutter-apk/app-release.apk \
+      | grep -oE "drawable/ic_[a-z_]+"
+
+  - ring_incoming: the call ringtone; without it incoming calls are silent.
+  - ic_*: icons for the buttons on the call notifications. A stripped icon
+    makes the whole notification fail to post, not just lose its picture.
 -->
 <resources
     xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@raw/ring_incoming"
+    tools:keep="@raw/ring_incoming,@drawable/ic_call_end,@drawable/ic_mic,@drawable/ic_mic_off,@drawable/ic_speaker_on,@drawable/ic_speaker_off"
     tools:shrinkMode="safe" />

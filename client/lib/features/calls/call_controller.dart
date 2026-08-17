@@ -108,13 +108,17 @@ final activeCallArgsProvider = StateProvider<CallArgs?>((ref) => null);
 
 final callControllerProvider =
     StateNotifierProvider.autoDispose.family<CallController, CallUiState, CallArgs>((ref, args) {
-  final controller = CallController(ref, args);
+  // A call has to outlive its screen. Without this, backing out of the call
+  // screen disposed the provider and tore the peer connection down — the
+  // call simply dropped instead of continuing from the notification.
+  final link = ref.keepAlive();
+  final controller = CallController(ref, args, releaseKeepAlive: link.close);
   ref.onDispose(controller.disposeCall);
   return controller;
 });
 
 class CallController extends StateNotifier<CallUiState> {
-  CallController(this._ref, this.args)
+  CallController(this._ref, this.args, {required this.releaseKeepAlive})
       : super(CallUiState(phase: args.isOutgoing ? CallPhase.connecting : CallPhase.incomingRinging)) {
     AppLogger.info(_tag, 'created for ${args.conversationId} (outgoing=${args.isOutgoing})');
 
@@ -149,6 +153,9 @@ class CallController extends StateNotifier<CallUiState> {
   final Ref _ref;
   final CallArgs args;
 
+  /// Lets the provider be collected again once the call is over.
+  final void Function() releaseKeepAlive;
+
   RTCPeerConnection? _pc;
   MediaStream? _localStream;
   StreamSubscription<Map<String, dynamic>>? _wsSub;
@@ -157,6 +164,59 @@ class CallController extends StateNotifier<CallUiState> {
   Map<String, dynamic>? _pendingOfferSdp;
   Timer? _elapsedTimer;
   Timer? _statsTimer;
+
+  /// Set when the user accepts before the offer has reached this device.
+  bool _acceptWhenOfferArrives = false;
+
+  /// Guards against a call that never finishes negotiating. WebRTC does not
+  /// always report a failure — ICE can sit in "checking" indefinitely — so
+  /// without this the screen can stay on "connecting" forever.
+  Timer? _connectWatchdog;
+
+  static const _connectTimeout = Duration(seconds: 45);
+
+  /// Everything that has to follow the call's state lives here, so no caller
+  /// has to remember to refresh the shade entry or release the provider.
+  @override
+  set state(CallUiState value) {
+    final before = super.state;
+    super.state = value;
+
+    final phaseChanged = value.phase != before.phase;
+    if (phaseChanged && value.phase == CallPhase.ended) {
+      unawaited(CallNotifications.cancelOngoingCall());
+      // The call is over, so the provider may go when its screen does.
+      releaseKeepAlive();
+      return;
+    }
+
+    final controlsChanged =
+        value.micMuted != before.micMuted || value.speakerOn != before.speakerOn;
+    if (phaseChanged || controlsChanged) unawaited(_syncOngoingNotification());
+  }
+
+  Future<void> _syncOngoingNotification() async {
+    final phase = state.phase;
+    if (phase != CallPhase.active && phase != CallPhase.connecting) return;
+    await CallNotifications.showOngoingCall(
+      conversationId: args.conversationId,
+      peerUsername: args.peerUsername,
+      micMuted: state.micMuted,
+      speakerOn: state.speakerOn,
+      status: phase == CallPhase.active ? 'Идёт разговор' : 'Соединение…',
+    );
+  }
+
+  void _startConnectWatchdog() {
+    _connectWatchdog?.cancel();
+    _connectWatchdog = Timer(_connectTimeout, () {
+      if (!mounted || state.phase == CallPhase.active || state.phase == CallPhase.ended) return;
+      AppLogger.warn(_tag, 'giving up: still ${state.phase} after ${_connectTimeout.inSeconds}s');
+      unawaited(_stopRingtone());
+      _ref.read(wsClientProvider).send({'type': 'call:end', 'conversationId': args.conversationId});
+      state = state.copyWith(phase: CallPhase.ended, error: 'Не удалось соединиться');
+    });
+  }
 
   Future<List<Map<String, dynamic>>> _fetchIceServers() async {
     final dio = _ref.read(apiClientProvider);
@@ -223,6 +283,7 @@ class CallController extends StateNotifier<CallUiState> {
       if (connState == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
         unawaited(_stopRingtone());
         if (!mounted) return;
+        _connectWatchdog?.cancel();
         if (state.phase != CallPhase.active) {
           state = state.copyWith(phase: CallPhase.active, reconnecting: false);
           _startElapsedTimer();
@@ -318,15 +379,29 @@ class CallController extends StateNotifier<CallUiState> {
   }
 
   /// Called when the callee taps "Accept" on an incoming call.
+  ///
+  /// The offer may not have arrived yet. Answering a notification for a call
+  /// that woke the app from cold starts the screen well before the socket has
+  /// connected and collected the offer the node parked for us — this used to
+  /// log a warning and return, leaving the call stuck on "connecting" with
+  /// nothing ever retrying. Now the intent is remembered and [_onWsEvent]
+  /// finishes the job when the offer lands.
   Future<void> acceptIncomingCall() async {
-    final sdp = _pendingOfferSdp;
-    if (sdp == null) {
-      AppLogger.warn(_tag, 'acceptIncomingCall called with no pending offer');
-      return;
-    }
     await _stopRingtone();
     if (mounted) state = state.copyWith(phase: CallPhase.connecting);
+    _startConnectWatchdog();
 
+    final sdp = _pendingOfferSdp;
+    if (sdp == null) {
+      AppLogger.info(_tag, 'accept pressed before the offer arrived; waiting for it');
+      _acceptWhenOfferArrives = true;
+      return;
+    }
+    await _answerOffer(sdp);
+  }
+
+  Future<void> _answerOffer(Map<String, dynamic> sdp) async {
+    _acceptWhenOfferArrives = false;
     try {
       await _ensurePeerConnection();
       await _pc!.setRemoteDescription(RTCSessionDescription(sdp['sdp'] as String, sdp['type'] as String));
@@ -402,6 +477,18 @@ class CallController extends StateNotifier<CallUiState> {
     if (event['conversationId'] != args.conversationId) return;
 
     switch (event['type']) {
+      case 'call:offer':
+        // Arrives after this controller exists when the app was woken by a
+        // push: the node parks the offer and only hands it over once the
+        // socket is up, which is well after the call screen has opened.
+        final offer = event['sdp'] as Map<String, dynamic>?;
+        if (offer == null) break;
+        AppLogger.info(_tag, 'received offer for ${args.conversationId}');
+        _pendingOfferSdp = offer;
+        if (_acceptWhenOfferArrives) {
+          unawaited(_answerOffer(offer));
+        }
+        break;
       case 'call:answer':
         AppLogger.info(_tag, 'received answer for ${args.conversationId}');
         _handleAnswer(event['sdp'] as Map<String, dynamic>);
@@ -441,6 +528,7 @@ class CallController extends StateNotifier<CallUiState> {
     await _drainPendingCandidates();
     if (mounted && state.phase != CallPhase.active) {
       state = state.copyWith(phase: CallPhase.connecting);
+      _startConnectWatchdog();
     }
   }
 
@@ -471,6 +559,8 @@ class CallController extends StateNotifier<CallUiState> {
     AppLogger.info(_tag, 'disposing call controller for ${args.conversationId}');
     _elapsedTimer?.cancel();
     _statsTimer?.cancel();
+    _connectWatchdog?.cancel();
+    await CallNotifications.cancelOngoingCall();
     await _stopRingtone();
     await _wsSub?.cancel();
     for (final track in _localStream?.getTracks() ?? <MediaStreamTrack>[]) {

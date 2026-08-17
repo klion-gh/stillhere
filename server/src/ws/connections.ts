@@ -62,6 +62,23 @@ export function sendToUser(userId: string, payload: unknown): boolean {
   return delivered;
 }
 
+/// Sends the same payload to every connected client. Used to tell apps that
+/// diagnostics were switched on or off, so they start or stop reporting
+/// without anyone having to restart them.
+export function broadcast(payload: unknown): number {
+  const data = JSON.stringify(payload);
+  let sent = 0;
+  for (const set of connections.values()) {
+    for (const socket of set) {
+      if (socket.readyState === socket.OPEN) {
+        socket.send(data);
+        sent++;
+      }
+    }
+  }
+  return sent;
+}
+
 /// Starts the ping/terminate loop. Returns a stop function for shutdown.
 export function startHeartbeat(log: { info: (o: object, m: string) => void }): () => void {
   const timer = setInterval(() => {

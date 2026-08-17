@@ -15,6 +15,34 @@ model NodeConfig {
   createdAt    DateTime @default(now())
 }
 
+// Small key/value store for node-level state that has to survive a restart.
+// Currently only whether diagnostics are recording.
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// Diagnostic trail, written only while diagnostics are switched on. Off by
+// default and pruned to a few days, because it records who did what and when
+// — useful for chasing a call that wouldn't connect, not something to keep
+// running on a private messenger.
+model DiagnosticEvent {
+  id       String   @id @default(uuid())
+  at       DateTime @default(now())
+  // Deliberately not a foreign key: the trail should survive the user row
+  // being deleted, and it must never block a deletion.
+  userId   String?
+  username String?
+  source   String
+  kind     String
+  detail   String?
+  data     Json?
+
+  @@index([at])
+  @@index([userId, at])
+}
+
 model User {
   id           String   @id @default(uuid())
   username     String   @unique

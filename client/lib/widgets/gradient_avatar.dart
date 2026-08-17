@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/appearance.dart';
 import '../core/avatar_cache.dart';
 import '../core/theme.dart';
+import '../models/user.dart';
 import 'animated_background.dart';
 
 /// Circular avatar: the user's picture if they have one, otherwise a
@@ -28,6 +29,27 @@ class GradientAvatar extends ConsumerWidget {
     this.hasAvatar = false,
     this.avatarUpdatedAt,
   });
+
+  /// For the common case where the whole user is on hand. [fallbackUsername]
+  /// covers the moment before the conversation list has loaded, when all a
+  /// screen has is the tag from its route.
+  factory GradientAvatar.of(
+    AppUser? user, {
+    Key? key,
+    required String fallbackUsername,
+    double size = 48,
+    bool showPulse = false,
+  }) {
+    return GradientAvatar(
+      key: key,
+      username: user?.username ?? fallbackUsername,
+      size: size,
+      showPulse: showPulse,
+      userId: user?.id,
+      hasAvatar: user?.hasAvatar ?? false,
+      avatarUpdatedAt: user?.avatarUpdatedAt,
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

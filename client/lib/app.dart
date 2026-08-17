@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/appearance.dart';
+import 'core/background_actions.dart';
 import 'core/call_notifications.dart';
 import 'core/desktop_notifications.dart';
+import 'core/diagnostics.dart';
 import 'core/incoming_call.dart';
 import 'core/providers.dart';
 import 'core/push_service.dart';
@@ -25,6 +28,7 @@ class StillHereApp extends ConsumerStatefulWidget {
 
 class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBindingObserver {
   StreamSubscription<Map<String, dynamic>>? _wsSub;
+  ReceivePort? _actionPort;
   bool _inForeground = true;
 
   @override
@@ -35,6 +39,8 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
     // is anywhere in the app — or nowhere, with it backgrounded.
     _wsSub = ref.read(wsClientProvider).events.listen(_handleWsEvent);
     CallNotifications.onCallAction = _handleCallNotificationAction;
+    // Presses handled in the background isolate come back through here.
+    _actionPort = registerNotificationActionPort(_handleCallNotificationAction);
 
     // A token can be issued long after the session is restored, so register
     // it whenever it arrives rather than only on the login transition —
@@ -115,15 +121,51 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
         }
         break;
 
+      // Controls on the shade entry for a call that's already running. The
+      // call is live by definition here, so they go straight to its
+      // controller.
+      case CallNotificationAction.hangUp:
+        if (isLive) {
+          ref.read(callControllerProvider(liveArgs).notifier).hangUp();
+        } else {
+          ref.read(wsClientProvider).send({
+            'type': 'call:end',
+            'conversationId': event.conversationId,
+          });
+        }
+        unawaited(CallNotifications.cancelOngoingCall());
+        break;
+
+      case CallNotificationAction.toggleMute:
+        if (isLive) unawaited(ref.read(callControllerProvider(liveArgs).notifier).toggleMute());
+        break;
+
+      case CallNotificationAction.toggleSpeaker:
+        if (isLive) unawaited(ref.read(callControllerProvider(liveArgs).notifier).toggleSpeaker());
+        break;
+
       case CallNotificationAction.open:
-        if (!isLive) _openCallScreen(event);
+        // Tapping the body should always land on the call, including for a
+        // call already running that the user navigated away from.
+        _openCallScreen(event);
         break;
     }
   }
 
   void _openCallScreen(CallNotificationEvent event) {
+    // The controller is keyed by the whole CallArgs, so reopening a live call
+    // has to reuse its exact arguments. Guessing outgoing=false would spin up
+    // a second controller for a call the user placed themselves.
+    final live = ref.read(activeCallArgsProvider);
+    final args = live?.conversationId == event.conversationId
+        ? live!
+        : CallArgs(
+            conversationId: event.conversationId,
+            peerUsername: event.peerUsername,
+            isOutgoing: false,
+          );
     ref.read(routerProvider).push(
-          '/call/${event.conversationId}?peer=${event.peerUsername}&outgoing=false',
+          '/call/${args.conversationId}?peer=${args.peerUsername}&outgoing=${args.isOutgoing}',
         );
   }
 
@@ -150,6 +192,11 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
         // Our own message: keep the list preview in step with what we sent.
         _applyMessageToList(event, fromMe: true);
         break;
+      case 'diagnostics:config':
+        // The node's operator switched recording on or off. Honoured live so
+        // a problem can be captured without asking anyone to restart.
+        ref.read(diagnosticsReporterProvider).setEnabled(event['enabled'] == true);
+        break;
       case 'peer:updated':
         final userId = event['userId'] as String?;
         final username = event['username'] as String?;
@@ -169,8 +216,18 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
     final fromUserId = event['from'] as String?;
     if (conversationId == null || sdp == null || fromUserId == null) return;
 
-    if (ref.read(activeCallConversationIdProvider) != null) {
-      // Already on a call: politely decline the second incoming offer.
+    final activeConversationId = ref.read(activeCallConversationIdProvider);
+    if (activeConversationId == conversationId) {
+      // The offer for the call already on screen. This happens whenever a
+      // push woke the app: the notification opens the call screen, and the
+      // offer the node parked for us only arrives once the socket is up.
+      // The call controller picks it up from the same stream — hanging up
+      // here is what used to leave the callee stuck on "connecting" while
+      // the caller saw the call end.
+      return;
+    }
+    if (activeConversationId != null) {
+      // A different call while one is in progress: politely decline.
       ref.read(wsClientProvider).send({'type': 'call:end', 'conversationId': conversationId});
       return;
     }
@@ -267,6 +324,7 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _actionPort?.close();
     _wsSub?.cancel();
     super.dispose();
   }
@@ -294,6 +352,12 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
         final node = ref.read(nodeControllerProvider).valueOrNull;
         if (node != null && node.host != null && node.nodeToken != null) {
           unawaited(ref.read(authControllerProvider.notifier).registerPushToken());
+          // A restored session is rebuilt from the id and tag kept on disk,
+          // so it knows nothing about the avatar. Without this the user's own
+          // picture disappears on every launch.
+          unawaited(ref.read(authControllerProvider.notifier).refreshProfile());
+          // Recording is a node-side switch, so ask on every connect.
+          unawaited(ref.read(diagnosticsReporterProvider).syncWithNode());
           ref.read(wsClientProvider).connect(
                 host: node.host!,
                 nodeToken: node.nodeToken!,

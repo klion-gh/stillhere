@@ -7,6 +7,7 @@ import { verifyNodeToken } from "../modules/node/tokens.js";
 import { addConnection, removeConnection, sendToUser, isOnline, startHeartbeat } from "./connections.js";
 import { sendToUserDevices, isPushEnabled } from "../modules/push/firebase.js";
 import { holdCallOffer, takePendingCall, dropPendingCall, sweepExpiredCalls } from "./pending_calls.js";
+import { recordEvent } from "../modules/diagnostics/store.js";
 
 const clientMessageSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("message:send"), conversationId: z.string(), content: z.string().min(1).max(4000), clientId: z.string().optional() }),
@@ -86,6 +87,7 @@ export async function wsGateway(app: FastifyInstance) {
     }
 
     log.info({ userId }, "ws: connected");
+    recordEvent({ source: "server", userId, username, kind: "ws.connected" }, log);
     addConnection(userId, socket);
     void broadcastPresence(userId, "online");
 
@@ -139,6 +141,16 @@ export async function wsGateway(app: FastifyInstance) {
             clientId: msg.clientId,
           });
           log.info({ userId, peerId, conversationId: msg.conversationId, delivered }, "ws: message relayed");
+          recordEvent(
+            {
+              source: "server",
+              userId,
+              username,
+              kind: "message.relayed",
+              data: { conversationId: msg.conversationId, peerId, delivered },
+            },
+            log,
+          );
           if (delivered) {
             saved = await prisma.message.update({ where: { id: saved.id }, data: { deliveredAt: new Date() } });
           } else {
@@ -168,6 +180,16 @@ export async function wsGateway(app: FastifyInstance) {
         // logging it at info level would drown out everything else.
         if (msg.type !== "call:stats") {
           log.info({ userId, peerId, conversationId: msg.conversationId, type: msg.type, delivered }, "ws: call signal relayed");
+          recordEvent(
+            {
+              source: "server",
+              userId,
+              username,
+              kind: `call.${msg.type.replace("call:", "")}`,
+              data: { conversationId: msg.conversationId, peerId, delivered },
+            },
+            log,
+          );
         }
 
         // A caller hanging up should clear anything parked for the callee,
@@ -210,6 +232,7 @@ export async function wsGateway(app: FastifyInstance) {
 
     socket.on("close", () => {
       log.info({ userId }, "ws: disconnected");
+      recordEvent({ source: "server", userId, username, kind: "ws.disconnected" }, log);
       removeConnection(userId, socket);
       if (!isOnline(userId)) {
         void broadcastPresence(userId, "offline");

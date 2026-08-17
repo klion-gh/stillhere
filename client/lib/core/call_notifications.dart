@@ -3,12 +3,32 @@ import 'dart:io';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import 'background_actions.dart';
 import 'logger.dart';
 
 const _tag = 'notify';
 
-/// What the user did on an incoming-call notification.
-enum CallNotificationAction { accept, decline, open }
+/// Action ids carried on the call notification. Top level because the
+/// background isolate that handles a press has to recognise them too.
+const kCallAcceptAction = 'call_accept';
+const kCallDeclineAction = 'call_decline';
+const kCallHangUpAction = 'call_hang_up';
+const kCallMuteAction = 'call_mute';
+const kCallSpeakerAction = 'call_speaker';
+
+/// What the user did on a call notification.
+enum CallNotificationAction { accept, decline, open, hangUp, toggleMute, toggleSpeaker }
+
+/// Maps an Android action id onto [CallNotificationAction]. Shared with the
+/// background isolate, which forwards presses by id.
+CallNotificationAction callActionFromId(String? actionId) => switch (actionId) {
+      kCallAcceptAction => CallNotificationAction.accept,
+      kCallDeclineAction => CallNotificationAction.decline,
+      kCallHangUpAction => CallNotificationAction.hangUp,
+      kCallMuteAction => CallNotificationAction.toggleMute,
+      kCallSpeakerAction => CallNotificationAction.toggleSpeaker,
+      _ => CallNotificationAction.open,
+    };
 
 class CallNotificationEvent {
   final CallNotificationAction action;
@@ -31,9 +51,8 @@ class CallNotificationEvent {
 class CallNotifications {
   static final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
   static const int _incomingCallId = 1001;
+  static const int _ongoingCallId = 1002;
 
-  static const String _acceptAction = 'call_accept';
-  static const String _declineAction = 'call_decline';
 
   /// Set by the app so notification taps can drive navigation and call
   /// control from outside the widget tree.
@@ -41,13 +60,13 @@ class CallNotifications {
 
   static const _callActions = <AndroidNotificationAction>[
     AndroidNotificationAction(
-      _declineAction,
+      kCallDeclineAction,
       'Отклонить',
       showsUserInterface: false,
       cancelNotification: true,
     ),
     AndroidNotificationAction(
-      _acceptAction,
+      kCallAcceptAction,
       'Ответить',
       showsUserInterface: true,
       cancelNotification: true,
@@ -120,6 +139,9 @@ class CallNotifications {
       await _plugin.initialize(
         settings,
         onDidReceiveNotificationResponse: _handleResponse,
+        // Declining doesn't bring the app forward, so when the app isn't
+        // running the press is delivered to a separate isolate instead.
+        onDidReceiveBackgroundNotificationResponse: notificationBackgroundHandler,
       );
 
       if (!requestPermission) return;
@@ -144,11 +166,7 @@ class CallNotifications {
     }
     if (data['kind'] != 'call') return;
 
-    final action = switch (response.actionId) {
-      _acceptAction => CallNotificationAction.accept,
-      _declineAction => CallNotificationAction.decline,
-      _ => CallNotificationAction.open,
-    };
+    final action = callActionFromId(response.actionId);
 
     AppLogger.info(_tag, 'call notification action: $action');
     onCallAction?.call(CallNotificationEvent(
@@ -191,6 +209,90 @@ class CallNotifications {
       await _plugin.cancel(_incomingCallId);
     } catch (e, st) {
       AppLogger.error(_tag, 'cancelIncomingCall failed', e, st);
+    }
+  }
+
+  /// The shade entry for a call that's already running, so leaving the call
+  /// screen doesn't mean losing the call.
+  ///
+  /// Media style is what gets the controls drawn as compact round icon
+  /// buttons — a plain notification renders its actions as a row of text.
+  /// Call it again with new flags to update the buttons in place; the id is
+  /// fixed, so it replaces rather than stacks.
+  static Future<void> showOngoingCall({
+    required String conversationId,
+    required String peerUsername,
+    required bool micMuted,
+    required bool speakerOn,
+    required String status,
+  }) async {
+    if (!Platform.isAndroid) return;
+    try {
+      final details = AndroidNotificationDetails(
+        'ongoing_call',
+        'Текущий звонок',
+        channelDescription: 'Управление активным звонком',
+        // Default importance keeps it out of the "Silent" pile at the bottom
+        // of the shade — a call in progress belongs at the top. The channel
+        // itself is silent, so nothing buzzes when a button is pressed.
+        importance: Importance.defaultImportance,
+        priority: Priority.defaultPriority,
+        category: AndroidNotificationCategory.call,
+        playSound: false,
+        enableVibration: false,
+        ongoing: true,
+        autoCancel: false,
+        onlyAlertOnce: true,
+        showWhen: false,
+        visibility: NotificationVisibility.public,
+        styleInformation: const MediaStyleInformation(),
+        actions: <AndroidNotificationAction>[
+          AndroidNotificationAction(
+            kCallMuteAction,
+            micMuted ? 'Включить микрофон' : 'Выключить микрофон',
+            icon: DrawableResourceAndroidBitmap(micMuted ? 'ic_mic_off' : 'ic_mic'),
+            showsUserInterface: false,
+            cancelNotification: false,
+          ),
+          const AndroidNotificationAction(
+            kCallHangUpAction,
+            'Положить трубку',
+            icon: DrawableResourceAndroidBitmap('ic_call_end'),
+            showsUserInterface: false,
+            cancelNotification: true,
+          ),
+          AndroidNotificationAction(
+            kCallSpeakerAction,
+            speakerOn ? 'Динамик' : 'Разговорный',
+            icon: DrawableResourceAndroidBitmap(speakerOn ? 'ic_speaker_on' : 'ic_speaker_off'),
+            showsUserInterface: false,
+            cancelNotification: false,
+          ),
+        ],
+      );
+
+      await _plugin.show(
+        _ongoingCallId,
+        peerUsername.isNotEmpty ? '@$peerUsername' : 'Звонок',
+        status,
+        NotificationDetails(android: details),
+        payload: jsonEncode({
+          'kind': 'call',
+          'conversationId': conversationId,
+          'peerUsername': peerUsername,
+        }),
+      );
+    } catch (e, st) {
+      AppLogger.error(_tag, 'showOngoingCall failed', e, st);
+    }
+  }
+
+  static Future<void> cancelOngoingCall() async {
+    if (!Platform.isAndroid) return;
+    try {
+      await _plugin.cancel(_ongoingCallId);
+    } catch (e, st) {
+      AppLogger.error(_tag, 'cancelOngoingCall failed', e, st);
     }
   }
 

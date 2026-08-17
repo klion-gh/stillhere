@@ -8,6 +8,18 @@ final conversationsProvider = AsyncNotifierProvider<ConversationsController, Lis
   ConversationsController.new,
 );
 
+/// The other person in a conversation, for screens that only have the
+/// conversation id. They used to build an avatar from the tag alone, which is
+/// why an uploaded picture appeared in the chat list and nowhere else.
+final conversationPeerProvider = Provider.family<AppUser?, String>((ref, conversationId) {
+  final conversations = ref.watch(conversationsProvider).valueOrNull;
+  if (conversations == null) return null;
+  for (final c in conversations) {
+    if (c.id == conversationId) return c.peer;
+  }
+  return null;
+});
+
 class ConversationsController extends AsyncNotifier<List<Conversation>> {
   @override
   Future<List<Conversation>> build() async {

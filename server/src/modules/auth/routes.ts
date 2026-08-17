@@ -3,6 +3,7 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { normalizeUsername, isValidUsername } from "../users/username.js";
+import { publicUser } from "../users/public_user.js";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "./tokens.js";
 
 const credentialsSchema = z.object({
@@ -44,7 +45,7 @@ export async function authRoutes(app: FastifyInstance) {
     const accessToken = signAccessToken(user.id, user.username);
     const refreshToken = signRefreshToken(user.id);
     return reply.code(201).send({
-      user: { id: user.id, username: user.username },
+      user: publicUser(user),
       accessToken,
       refreshToken,
     });
@@ -73,7 +74,7 @@ export async function authRoutes(app: FastifyInstance) {
     const accessToken = signAccessToken(user.id, user.username);
     const refreshToken = signRefreshToken(user.id);
     return reply.send({
-      user: { id: user.id, username: user.username },
+      user: publicUser(user),
       accessToken,
       refreshToken,
     });

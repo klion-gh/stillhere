@@ -6,8 +6,10 @@ import '../../core/appearance.dart';
 import '../../core/call_notifications.dart';
 import '../../core/incoming_call.dart';
 import '../../core/theme.dart';
+import '../../models/user.dart';
 import '../../widgets/gradient_avatar.dart';
 import '../auth/auth_controller.dart';
+import '../conversations/conversations_controller.dart';
 import 'chat_controller.dart';
 import 'message_bubble.dart';
 
@@ -85,6 +87,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final myId = ref.watch(authControllerProvider).valueOrNull?.user?.id;
     final messagesAsync = ref.watch(chatControllerProvider(widget.conversationId));
     final peer = widget.peerUsername ?? '';
+    // The route carries only the tag; the picture comes from the loaded
+    // conversation.
+    final peerUser = ref.watch(conversationPeerProvider(widget.conversationId));
     final canSend = _textController.text.trim().isNotEmpty;
 
     return Scaffold(
@@ -94,6 +99,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             children: [
               _ChatHeader(
                 peerUsername: peer,
+                peer: peerUser,
                 onBack: () => context.pop(),
                 onCall: () => context.push('/call/${widget.conversationId}?peer=$peer&outgoing=true'),
               ),
@@ -114,7 +120,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   data: (messages) {
                     _scrollToBottom(animate: false);
                     if (messages.isEmpty) {
-                      return _EmptyChat(peerUsername: peer);
+                      return _EmptyChat(peerUsername: peer, peer: peerUser);
                     }
                     return ListView.builder(
                       controller: _scrollController,
@@ -148,10 +154,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
 class _ChatHeader extends StatelessWidget {
   final String peerUsername;
+  final AppUser? peer;
   final VoidCallback onBack;
   final VoidCallback onCall;
 
-  const _ChatHeader({required this.peerUsername, required this.onBack, required this.onCall});
+  const _ChatHeader({
+    required this.peerUsername,
+    required this.peer,
+    required this.onBack,
+    required this.onCall,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -160,7 +172,8 @@ class _ChatHeader extends StatelessWidget {
       child: Row(
         children: [
           IconButton(onPressed: onBack, icon: const Icon(Icons.arrow_back_rounded)),
-          if (peerUsername.isNotEmpty) GradientAvatar(username: peerUsername, size: 40),
+          if (peerUsername.isNotEmpty)
+            GradientAvatar.of(peer, fallbackUsername: peerUsername, size: 40),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -255,8 +268,9 @@ class _Composer extends StatelessWidget {
 
 class _EmptyChat extends StatelessWidget {
   final String peerUsername;
+  final AppUser? peer;
 
-  const _EmptyChat({required this.peerUsername});
+  const _EmptyChat({required this.peerUsername, required this.peer});
 
   @override
   Widget build(BuildContext context) {
@@ -264,7 +278,8 @@ class _EmptyChat extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (peerUsername.isNotEmpty) GradientAvatar(username: peerUsername, size: 72, showPulse: true),
+          if (peerUsername.isNotEmpty)
+            GradientAvatar.of(peer, fallbackUsername: peerUsername, size: 72, showPulse: true),
           const SizedBox(height: 20),
           Text(
             peerUsername.isNotEmpty ? 'Это начало вашего чата с @$peerUsername' : 'Пока нет сообщений',

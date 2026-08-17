@@ -115,7 +115,7 @@ class _FoundCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          GradientAvatar(username: user.username, size: 76, showPulse: true),
+          GradientAvatar.of(user, fallbackUsername: user.username, size: 76, showPulse: true),
           const SizedBox(height: 18),
           Text(
             '@${user.username}',

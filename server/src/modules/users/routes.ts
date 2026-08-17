@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { normalizeUsername } from "./username.js";
+import { publicUser } from "./public_user.js";
 
 const lookupQuerySchema = z.object({
   tag: z.string().min(1),
@@ -23,6 +24,6 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: "cannot_lookup_self" });
     }
 
-    return reply.send({ id: user.id, username: user.username });
+    return reply.send(publicUser(user));
   });
 }
