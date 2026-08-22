@@ -4,7 +4,7 @@ publish_to: "none"
 # The +N build number becomes Android's versionCode. It must increase on
 # every release — Android compares versionCode (not the name) when deciding
 # whether an APK is an update, and refuses to install a lower one.
-version: 0.12.0+13
+version: 0.13.0+14
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
