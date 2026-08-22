@@ -179,6 +179,9 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
       case 'call:offer':
         _handleIncomingCall(event);
         break;
+      case 'call:ice-candidate':
+        _bufferEarlyCandidate(event);
+        break;
       case 'message:new':
         _handleIncomingMessage(event);
         break;
@@ -208,6 +211,21 @@ class _StillHereAppState extends ConsumerState<StillHereApp> with WidgetsBinding
         }
         break;
     }
+  }
+
+  /// Holds candidates that arrive before the call controller has subscribed.
+  ///
+  /// Only relevant for the window between the offer landing and the call
+  /// screen being built — once a controller exists it listens to the socket
+  /// itself, so there's nothing to catch.
+  void _bufferEarlyCandidate(Map<String, dynamic> event) {
+    if (ref.read(activeCallArgsProvider) != null) return;
+    final conversationId = event['conversationId'] as String?;
+    if (conversationId == null) return;
+
+    final buffered = ref.read(pendingIncomingCandidatesProvider);
+    if (buffered.length >= 64) return;
+    ref.read(pendingIncomingCandidatesProvider.notifier).state = [...buffered, event];
   }
 
   void _handleIncomingCall(Map<String, dynamic> event) {

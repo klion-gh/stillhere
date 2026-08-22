@@ -12,6 +12,17 @@ class IncomingCall {
 /// (and cleared) by CallScreen when it opens as the callee.
 final pendingIncomingCallProvider = StateProvider<IncomingCall?>((ref) => null);
 
+/// ICE candidates that arrived before the call controller existed.
+///
+/// The node holds the caller's candidates while a pushed device wakes up and
+/// releases them right behind the offer — a frame or two before the call
+/// screen has been built and subscribed to the socket. That event stream is a
+/// broadcast stream, so anything sent before the subscription exists is
+/// simply gone. Without this the callee is left with a session description
+/// and no remote candidates: a call that rings and then never connects.
+final pendingIncomingCandidatesProvider =
+    StateProvider<List<Map<String, dynamic>>>((ref) => const []);
+
 /// Conversation id of the call currently in progress, if any. Used to
 /// auto-decline a second incoming offer while already on a call.
 final activeCallConversationIdProvider = StateProvider<String?>((ref) => null);

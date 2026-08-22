@@ -6,7 +6,7 @@ import { verifyAccessToken } from "../modules/auth/tokens.js";
 import { verifyNodeToken } from "../modules/node/tokens.js";
 import { addConnection, removeConnection, sendToUser, isOnline, startHeartbeat } from "./connections.js";
 import { sendToUserDevices, isPushEnabled } from "../modules/push/firebase.js";
-import { holdCallOffer, takePendingCall, dropPendingCall, sweepExpiredCalls } from "./pending_calls.js";
+import { holdCallOffer, holdCallCandidate, takePendingCall, dropPendingCall, sweepExpiredCalls } from "./pending_calls.js";
 import { recordEvent } from "../modules/diagnostics/store.js";
 
 const clientMessageSchema = z.discriminatedUnion("type", [
@@ -91,12 +91,20 @@ export async function wsGateway(app: FastifyInstance) {
     addConnection(userId, socket);
     void broadcastPresence(userId, "online");
 
-    // If a call woke this device, the offer has been waiting for the socket
-    // to exist. Hand it over now.
+    // If a call woke this device, the offer and the candidates that followed
+    // it have been waiting for the socket to exist. Order matters: offer
+    // first, then candidates, which is the order the client would have seen
+    // had it been awake.
     const parked = takePendingCall(userId);
     if (parked) {
-      log.info({ userId }, "ws: delivering call offer held while device was offline");
-      sendToUser(userId, parked);
+      log.info(
+        { userId, candidates: parked.candidates.length },
+        "ws: delivering call offer held while device was offline",
+      );
+      sendToUser(userId, parked.offer);
+      for (const candidate of parked.candidates) {
+        sendToUser(userId, candidate);
+      }
     }
 
     socket.on("message", (raw: Buffer) => {
@@ -198,6 +206,19 @@ export async function wsGateway(app: FastifyInstance) {
           dropPendingCall(peerId, msg.conversationId);
         }
 
+        // The candidates trickle out within a second of the offer, while the
+        // callee's device is still waking up. Dropping them left that side
+        // with nothing to connect to — park them with the offer instead.
+        if (!delivered && msg.type === "call:ice-candidate") {
+          const held = holdCallCandidate(peerId, msg.conversationId, { ...msg, from: userId });
+          if (held) {
+            log.debug(
+              { userId, peerId, conversationId: msg.conversationId },
+              "ws: holding ICE candidate for a waking callee",
+            );
+          }
+        }
+
         if (!delivered && msg.type === "call:offer") {
           const relayed = { ...msg, from: userId };
           const woken = await sendToUserDevices(
@@ -215,8 +236,8 @@ export async function wsGateway(app: FastifyInstance) {
 
           if (woken > 0) {
             // Park the offer: the device is starting up and its socket
-            // doesn't exist yet, so there's nothing to deliver to for another
-            // second or two.
+            // doesn't exist yet, so there's nothing to deliver to for the
+            // next ten seconds or so.
             holdCallOffer(peerId, msg.conversationId, relayed);
             log.info({ userId, peerId, conversationId: msg.conversationId }, "ws: callee offline, woken by push");
           } else {

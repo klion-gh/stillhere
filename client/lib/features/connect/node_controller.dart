@@ -11,6 +11,7 @@ import '../../core/node_http_client.dart';
 import '../../core/providers.dart';
 import '../../core/push_service.dart';
 import 'node_client.dart';
+import 'saved_node.dart';
 import 'node_state.dart';
 
 const _tag = 'node';
@@ -69,6 +70,14 @@ class NodeController extends AsyncNotifier<NodeState> {
       if (fingerprintToStore != null) {
         await storage.saveFingerprint(fingerprintToStore);
       }
+
+      await storage.rememberNode(SavedNode(
+        host: host,
+        nodeToken: nodeToken,
+        pinnedFingerprint: fingerprintToStore,
+        lastUsedAt: DateTime.now(),
+      ));
+      ref.invalidate(savedNodesProvider);
 
       AppLogger.info(_tag, 'paired with $host');
       state = AsyncValue.data(NodeState(host: host, nodeToken: nodeToken, pinnedFingerprint: fingerprintToStore));
@@ -137,10 +146,74 @@ class NodeController extends AsyncNotifier<NodeState> {
     return NodeConnectException('Не удалось подключиться к серверу.');
   }
 
+  /// Reconnects to a node the user has paired with before.
+  ///
+  /// No password: the node token is what the pairing produced and it lasts a
+  /// year. It can still have been invalidated — the node reinstalled, its
+  /// password rotated — so the token is probed against an endpoint behind the
+  /// gate before the session is accepted. Failing that check reports the
+  /// problem instead of dropping the user into an app that 401s everywhere.
+  Future<void> connectToSaved(SavedNode node) async {
+    state = const AsyncValue.loading();
+
+    String? newlyPinned;
+    final httpClient = HttpClient()
+      ..badCertificateCallback = buildPinningCallback(
+        pinnedFingerprint: node.pinnedFingerprint,
+        onFirstPin: (fp) => newlyPinned = fp,
+      );
+
+    final dio = Dio(BaseOptions(
+      baseUrl: 'https://${node.host}',
+      connectTimeout: const Duration(seconds: 10),
+      headers: {'X-Node-Token': node.nodeToken},
+    ));
+    dio.httpClientAdapter = IOHttpClientAdapter(createHttpClient: () => httpClient);
+
+    try {
+      AppLogger.info(_tag, 'reconnecting to ${node.host} with the saved token...');
+      await dio.get('/node/push-config');
+
+      final storage = ref.read(nodeStorageProvider);
+      final fingerprint = newlyPinned ?? node.pinnedFingerprint;
+      await storage.saveHost(node.host);
+      await storage.saveNodeToken(node.nodeToken);
+      if (fingerprint != null) await storage.saveFingerprint(fingerprint);
+      await storage.rememberNode(node.copyWith(
+        pinnedFingerprint: fingerprint,
+        lastUsedAt: DateTime.now(),
+      ));
+      ref.invalidate(savedNodesProvider);
+
+      state = AsyncValue.data(
+        NodeState(host: node.host, nodeToken: node.nodeToken, pinnedFingerprint: fingerprint),
+      );
+      AppLogger.info(_tag, 'reconnected to ${node.host}');
+
+      unawaited(_configurePushFromNode(dio, node.nodeToken));
+    } catch (e, st) {
+      final exception = e is DioException && e.response?.statusCode == 401
+          ? NodeConnectException('Узел больше не принимает сохранённый доступ. Добавьте его заново с паролем.')
+          : _mapError(e);
+      AppLogger.error(_tag, 'reconnecting to ${node.host} failed', e, st);
+      state = AsyncValue.error(exception, StackTrace.current);
+      throw exception;
+    }
+  }
+
+  Future<void> forgetSaved(String host) async {
+    await ref.read(nodeStorageProvider).forgetNode(host);
+    ref.invalidate(savedNodesProvider);
+  }
+
   Future<void> recordPinnedFingerprint(String fingerprint) async {
-    await ref.read(nodeStorageProvider).saveFingerprint(fingerprint);
+    final storage = ref.read(nodeStorageProvider);
+    await storage.saveFingerprint(fingerprint);
     final current = state.valueOrNull;
     if (current != null) {
+      if (current.host != null) {
+        await storage.updateSavedFingerprint(current.host!, fingerprint);
+      }
       state = AsyncValue.data(current.copyWith(pinnedFingerprint: fingerprint));
     }
   }
@@ -160,3 +233,8 @@ class NodeController extends AsyncNotifier<NodeState> {
 }
 
 final nodeControllerProvider = AsyncNotifierProvider<NodeController, NodeState>(NodeController.new);
+
+/// Nodes the user has paired with, most recently used first.
+final savedNodesProvider = FutureProvider<List<SavedNode>>((ref) async {
+  return ref.read(nodeStorageProvider).readSavedNodes();
+});

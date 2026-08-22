@@ -141,10 +141,24 @@ class CallController extends StateNotifier<CallUiState> {
       if (pending != null && pending.conversationId == args.conversationId) {
         _pendingOfferSdp = pending.sdp;
       }
+      // Candidates the node released behind a parked offer arrive before this
+      // controller exists. Collect them now or the call has nothing to
+      // connect to.
+      final early = _ref.read(pendingIncomingCandidatesProvider);
+      for (final event in early) {
+        if (event['conversationId'] != args.conversationId) continue;
+        final candidate = event['candidate'] as Map<String, dynamic>?;
+        if (candidate != null) unawaited(_handleRemoteCandidate(candidate));
+      }
+      if (early.isNotEmpty) {
+        AppLogger.info(_tag, 'picked up ${early.length} candidate(s) buffered before the screen opened');
+      }
+
       unawaited(_ref.read(ringtoneServiceProvider).playIncoming());
       Future.microtask(() {
         if (mounted) {
           _ref.read(pendingIncomingCallProvider.notifier).state = null;
+          _ref.read(pendingIncomingCandidatesProvider.notifier).state = const [];
         }
       });
     }
@@ -160,6 +174,7 @@ class CallController extends StateNotifier<CallUiState> {
   MediaStream? _localStream;
   StreamSubscription<Map<String, dynamic>>? _wsSub;
   final List<RTCIceCandidate> _pendingRemoteCandidates = [];
+  final Set<String> _seenCandidates = {};
   bool _remoteDescriptionSet = false;
   Map<String, dynamic>? _pendingOfferSdp;
   Timer? _elapsedTimer;
@@ -533,6 +548,12 @@ class CallController extends StateNotifier<CallUiState> {
   }
 
   Future<void> _handleRemoteCandidate(Map<String, dynamic> c) async {
+    // The buffer of candidates collected before this controller existed and
+    // its own socket subscription overlap by a frame, so the same candidate
+    // can arrive twice.
+    final fingerprint = '${c['candidate']}|${c['sdpMid']}|${c['sdpMLineIndex']}';
+    if (!_seenCandidates.add(fingerprint)) return;
+
     AppLogger.info(_tag, 'remote ICE candidate: ${c['candidate']}');
     final candidate = RTCIceCandidate(
       c['candidate'] as String?,
