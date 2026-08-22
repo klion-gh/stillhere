@@ -1,3 +1,7 @@
+/// Asks GitHub Releases whether a newer version exists, and picks the asset for
+/// the platform it's running on.
+library;
+
 import 'dart:io';
 
 import 'package:dio/dio.dart';

@@ -1,3 +1,10 @@
+/**
+ * Sending push through Firebase.
+ *
+ * Push is optional: a node without it configured works fine, it just can't wake
+ * a device that isn't already connected. Messages are data-only, because a
+ * system-drawn notification can't ring with accept and decline buttons.
+ */
 import { readFileSync } from "node:fs";
 import { initializeApp, cert, type App } from "firebase-admin/app";
 import { getMessaging, type MulticastMessage } from "firebase-admin/messaging";

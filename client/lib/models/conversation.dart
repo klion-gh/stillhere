@@ -1,3 +1,7 @@
+/// A conversation: the other person, and a preview of the last thing said, which
+/// is what the chat list shows.
+library;
+
 import 'user.dart';
 
 class LastMessage {

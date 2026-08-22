@@ -1,3 +1,11 @@
+/// Mirrors the app's own log to the node while the node has recording switched
+/// on.
+///
+/// Off is the default and the normal state. It exists so a problem that only
+/// happens on someone else's phone — a call that won't connect, a push that
+/// never lands — can be looked at afterwards instead of guessed at.
+library;
+
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io';

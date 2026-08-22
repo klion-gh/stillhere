@@ -1,3 +1,13 @@
+/// The user session: signing in, signing back in from a saved account, renewing
+/// tokens, and signing out.
+///
+/// A saved account is stored as a refresh token, never a password. The node
+/// issues one for exactly this purpose, it expires on its own, and it can be
+/// invalidated server-side — none of which is true of a password.
+library;
+
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,7 +17,9 @@ import '../../core/providers.dart';
 import '../../core/push_service.dart';
 import '../../models/user.dart';
 import '../connect/node_client.dart';
+import '../connect/node_controller.dart';
 import 'auth_state.dart';
+import 'saved_account.dart';
 
 const _tag = 'auth';
 
@@ -77,6 +89,8 @@ class AuthController extends AsyncNotifier<AuthState> {
             username: user.username,
           );
 
+      await _rememberAccount(user, refreshToken);
+
       AppLogger.info(_tag, '$path succeeded for @${user.username}');
       state = AsyncValue.data(AuthState(user: user, accessToken: accessToken, refreshToken: refreshToken));
     } on DioException catch (e) {
@@ -87,6 +101,81 @@ class AuthController extends AsyncNotifier<AuthState> {
       state = AsyncValue.error(authException, StackTrace.current);
       throw authException;
     }
+  }
+
+  /// Files the account under the node it belongs to, so the login screen can
+  /// offer it as a tile later. Silent on failure: not being able to remember
+  /// someone is no reason to fail the sign-in they just completed.
+  Future<void> _rememberAccount(AppUser user, String refreshToken) async {
+    final host = ref.read(nodeControllerProvider).valueOrNull?.host;
+    if (host == null) return;
+    try {
+      await ref.read(tokenStorageProvider).rememberAccount(SavedAccount(
+            host: host,
+            userId: user.id,
+            username: user.username,
+            refreshToken: refreshToken,
+            hasAvatar: user.hasAvatar,
+            avatarUpdatedAt: user.avatarUpdatedAt,
+            lastUsedAt: DateTime.now(),
+          ));
+      ref.invalidate(savedAccountsProvider);
+    } catch (e) {
+      AppLogger.warn(_tag, 'could not remember the account: $e');
+    }
+  }
+
+  /// Signs back in as an account the user has used before.
+  ///
+  /// The refresh token stands in for the password. The node may have expired
+  /// or invalidated it — around a month is the usual life — in which case the
+  /// tile has to give way to the password form, so the failure is reported
+  /// rather than swallowed.
+  Future<void> signInWithSaved(SavedAccount account) async {
+    state = const AsyncValue.loading();
+    try {
+      final dio = buildNodeDio(ref);
+      final res = await dio.post('/auth/refresh', data: {'refreshToken': account.refreshToken});
+      final data = res.data as Map<String, dynamic>;
+      final accessToken = data['accessToken'] as String;
+      final refreshToken = data['refreshToken'] as String;
+
+      // /auth/refresh returns tokens, not a profile. The stored name gets the
+      // session started; refreshProfile() corrects it moments later if the
+      // person renamed themselves on another device.
+      final user = AppUser(
+        id: account.userId,
+        username: account.username,
+        hasAvatar: account.hasAvatar,
+        avatarUpdatedAt: account.avatarUpdatedAt,
+      );
+
+      await ref.read(tokenStorageProvider).saveSession(
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+            userId: user.id,
+            username: user.username,
+          );
+      await _rememberAccount(user, refreshToken);
+
+      AppLogger.info(_tag, 'signed back in as @${user.username}');
+      state = AsyncValue.data(
+        AuthState(user: user, accessToken: accessToken, refreshToken: refreshToken),
+      );
+      unawaited(refreshProfile());
+    } catch (e, st) {
+      AppLogger.error(_tag, 'saved sign-in failed for @${account.username}', e);
+      final failure = AuthException('Нужно войти заново — введите пароль.');
+      state = AsyncValue.error(failure, st);
+      throw failure;
+    }
+  }
+
+  Future<void> forgetAccount(SavedAccount account) async {
+    await ref
+        .read(tokenStorageProvider)
+        .forgetAccount(host: account.host, userId: account.userId);
+    ref.invalidate(savedAccountsProvider);
   }
 
   /// Re-reads the signed-in user from the node, so an avatar change shows up
@@ -143,7 +232,8 @@ class AuthController extends AsyncNotifier<AuthState> {
       final newRefreshToken = data['refreshToken'] as String;
 
       await ref.read(tokenStorageProvider).saveTokens(accessToken: accessToken, refreshToken: newRefreshToken);
-      state = AsyncValue.data(current!.copyWith(accessToken: accessToken, refreshToken: newRefreshToken));
+      if (current!.user != null) await _rememberAccount(current.user!, newRefreshToken);
+      state = AsyncValue.data(current.copyWith(accessToken: accessToken, refreshToken: newRefreshToken));
       AppLogger.info(_tag, 'access token refreshed');
       return true;
     } catch (e) {
@@ -198,3 +288,12 @@ class AuthController extends AsyncNotifier<AuthState> {
 }
 
 final authControllerProvider = AsyncNotifierProvider<AuthController, AuthState>(AuthController.new);
+
+/// Accounts saved for the node currently connected, most recent first. Empty
+/// while no node is connected — an account only means anything on the server
+/// that issued it.
+final savedAccountsProvider = FutureProvider<List<SavedAccount>>((ref) async {
+  final host = ref.watch(nodeControllerProvider).valueOrNull?.host;
+  if (host == null) return const [];
+  return ref.read(tokenStorageProvider).readSavedAccountsFor(host);
+});

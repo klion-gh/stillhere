@@ -1,3 +1,12 @@
+/// Notification presses that arrive with no app to handle them.
+///
+/// Android dispatches a press on a button that doesn't open the app into a
+/// separate isolate — the same process when the app is alive, but with none of
+/// its state, so the running call is out of reach. Presses are forwarded back to
+/// the app through a named port when there is one; when there isn't, declining a
+/// call goes over HTTP instead of the socket that doesn't exist yet.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';

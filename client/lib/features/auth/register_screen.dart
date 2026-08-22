@@ -1,3 +1,6 @@
+/// Creating an account on the node the app is connected to.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

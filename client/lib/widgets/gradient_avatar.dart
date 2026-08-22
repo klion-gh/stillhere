@@ -1,3 +1,10 @@
+/// The circular avatar, plus the backdrop and glow shared across screens.
+///
+/// Without a picture, the gradient is derived from the tag, so the same person is
+/// always the same colour on every device — recognition by colour rather than by
+/// reading.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

@@ -1,3 +1,15 @@
+/// One audio call, from ringing to hang-up.
+///
+/// Owns the peer connection and the signalling around it. Much of the care here
+/// is about a callee whose device was asleep: the offer and the caller's ICE
+/// candidates can arrive before this controller exists, the user can accept
+/// before the offer has landed, and WebRTC does not reliably report that a call
+/// is never going to connect — hence the watchdog.
+///
+/// The controller deliberately outlives its screen. Leaving the call screen
+/// should leave the call running, with the notification as its handle.
+library;
+
 import 'dart:async';
 import 'dart:io';
 

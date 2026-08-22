@@ -1,3 +1,10 @@
+/**
+ * The signed-in user's own profile: picture, tag and password.
+ *
+ * Avatars are served without a user token — the node gate already limits this
+ * to people paired with the node, and requiring more would mean every avatar
+ * request had to carry a session.
+ */
 import type { FastifyInstance } from "fastify";
 import bcrypt from "bcrypt";
 import { z } from "zod";

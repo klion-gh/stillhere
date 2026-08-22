@@ -1,3 +1,7 @@
+/// The call: who's on it, how long it's been, connection quality, and the
+/// controls. Reflects the controller's state; it doesn't own the call.
+library;
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';

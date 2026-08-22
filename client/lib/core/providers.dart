@@ -1,3 +1,8 @@
+/// Singletons that outlive any one screen: storage, the socket, the ringtone
+/// player. Kept in one place so their lifetimes are visible together, and so
+/// disposal is wired once rather than at each use site.
+library;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'node_storage.dart';

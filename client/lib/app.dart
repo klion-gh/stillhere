@@ -1,3 +1,14 @@
+/// The root widget, and the one place that listens to everything at once.
+///
+/// Calls, messages and notification presses can arrive while the user is on any
+/// screen — or on none, with the app in the background — so the socket listener
+/// and the notification callbacks live above the router rather than inside a
+/// screen that may not be built yet. It also owns the two-way plumbing that has
+/// to survive a screen not existing: buffering a call offer and its ICE
+/// candidates, and receiving notification presses forwarded from the background
+/// isolate.
+library;
+
 import 'dart:async';
 import 'dart:isolate';
 

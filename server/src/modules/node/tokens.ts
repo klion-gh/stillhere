@@ -1,3 +1,7 @@
+/**
+ * Issues and verifies node tokens — the credential that gets a device through
+ * the gate.
+ */
 import jwt from "jsonwebtoken";
 import { env } from "../../config/env.js";
 

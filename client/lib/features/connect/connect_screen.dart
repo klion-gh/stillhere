@@ -1,3 +1,9 @@
+/// Choosing a node: tiles for the ones paired before, each with a live round
+/// trip, above a tile that opens the address-and-password form. The form is what
+/// the screen shows outright on first run, when there is nothing to choose
+/// between.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

@@ -1,3 +1,10 @@
+/**
+ * Environment configuration, validated on boot.
+ *
+ * A node is configured by hand by whoever runs it, so a missing secret should
+ * stop the server with a clear message rather than surface later as a confusing
+ * runtime failure.
+ */
 import { z } from "zod";
 
 const envSchema = z.object({

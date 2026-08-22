@@ -1,3 +1,12 @@
+/// The socket. One connection per session, carrying messages, call signalling
+/// and presence.
+///
+/// Most of this file is about the connection not being trustworthy: a heartbeat
+/// that turns a silently dead socket into a real disconnect, reconnection with
+/// backoff, and a hook to renew the access token when the server closes with
+/// 4001 rather than making the user sign in again.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';

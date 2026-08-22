@@ -1,3 +1,6 @@
+/// One conversation: its history, the composer, and a button to call the person.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';

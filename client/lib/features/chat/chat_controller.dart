@@ -1,3 +1,7 @@
+/// The messages of one conversation: the page fetched on open, plus whatever
+/// arrives on the socket while it's open.
+library;
+
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';

@@ -1,3 +1,11 @@
+/// Pairing with a node and reconnecting to one.
+///
+/// Pairing exchanges the node password for a token that lasts a year, which is
+/// what lets a saved node be reopened without a password. Reconnecting probes
+/// that token before accepting the session, so a node that was reinstalled says
+/// so instead of leaving the user in an app where every request fails.
+library;
+
 import 'dart:async';
 
 import 'dart:io';
@@ -201,8 +209,12 @@ class NodeController extends AsyncNotifier<NodeState> {
     }
   }
 
+  /// Removes a node from the list, along with the accounts saved for it —
+  /// leaving credentials behind for a server the user just said to forget
+  /// would be the wrong reading of "forget".
   Future<void> forgetSaved(String host) async {
     await ref.read(nodeStorageProvider).forgetNode(host);
+    await ref.read(tokenStorageProvider).forgetAccountsFor(host);
     ref.invalidate(savedNodesProvider);
   }
 

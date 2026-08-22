@@ -42,8 +42,16 @@ FOREGROUND_SIZES = {
 ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 
 
-def trim(im: Image.Image) -> Image.Image:
-    box = im.getchannel("A").getbbox()
+def trim(im: Image.Image, threshold: int = 8) -> Image.Image:
+    """Crops to the visible artwork.
+
+    Thresholded rather than a plain getbbox(): exports often carry a haze of
+    almost-transparent pixels out to the canvas edge, and those are enough to
+    make getbbox() return the whole image, leaving the logo sitting in a wide
+    margin at every icon size.
+    """
+    mask = im.getchannel("A").point(lambda a: 255 if a > threshold else 0)
+    box = mask.getbbox()
     return im.crop(box) if box else im
 
 

@@ -1,3 +1,7 @@
+/**
+ * Hashes the node password into the database on first boot. Idempotent, so
+ * leaving the variable set in the environment afterwards is harmless.
+ */
 import bcrypt from "bcrypt";
 import { prisma } from "../../db/prisma.js";
 import { env } from "../../config/env.js";

@@ -1,3 +1,8 @@
+/// The chat list, and the incremental updates that keep it current — a new
+/// message moving a conversation to the top, a peer renaming themselves —
+/// without refetching the whole list each time.
+library;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';

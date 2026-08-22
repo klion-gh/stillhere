@@ -1,3 +1,6 @@
+/**
+ * Registration, sign-in and token renewal.
+ */
 import type { FastifyInstance } from "fastify";
 import bcrypt from "bcrypt";
 import { z } from "zod";

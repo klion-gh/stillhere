@@ -1,3 +1,10 @@
+/**
+ * How a user is described on the wire.
+ *
+ * Deliberately one function rather than a shape repeated at each call site:
+ * leaving the avatar fields out of the sign-in response is what once made an
+ * uploaded picture disappear on the next launch.
+ */
 import type { User } from "@prisma/client";
 
 /// The shape every endpoint uses when it hands a user to a client.

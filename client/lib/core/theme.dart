@@ -1,3 +1,11 @@
+/// The Material theme, built from the active palette.
+///
+/// Colours are mutable statics rather than theme entries because every screen
+/// reads them directly. That has a cost — a widget reading them has no
+/// dependency Flutter can track — which is what appearance.dart's watchPalette
+/// exists to repair.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 

@@ -1,3 +1,7 @@
+/**
+ * Issues and verifies the user's token pair: a short-lived access token and a
+ * long-lived refresh token.
+ */
 import jwt from "jsonwebtoken";
 import { env } from "../../config/env.js";
 

@@ -1,3 +1,7 @@
+/// The main screen: every conversation with its last message, the way into the
+/// profile, and the menu.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';

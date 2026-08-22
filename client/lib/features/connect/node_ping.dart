@@ -1,3 +1,8 @@
+/// Measures the round trip to a saved node for its tile. Uses the one endpoint
+/// outside the node-token gate, so it reports whether the server is up rather
+/// than whether the credential is still good.
+library;
+
 import 'dart:io';
 
 import 'package:dio/dio.dart';

@@ -1,3 +1,11 @@
+/// The work behind the profile screen.
+///
+/// Pictures are downscaled and re-encoded before upload — a modern phone camera
+/// produces several megabytes, and the node keeps avatars in its database. A tag
+/// change returns a new token pair, because the tag is encoded in the access
+/// token and the old one would keep showing the previous name until it expired.
+library;
+
 import 'dart:convert';
 import 'dart:typed_data';
 

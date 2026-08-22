@@ -1,3 +1,11 @@
+/**
+ * Diagnostics as the apps see them: whether to report, and where to send it.
+ *
+ * There is deliberately no endpoint for turning recording on. Anything the node
+ * serves is reachable from the internet, and a switch that starts recording
+ * everyone's activity should not be defended by a password. The operator flips
+ * it from inside the container instead, and the server notices within seconds.
+ */
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";

@@ -1,3 +1,6 @@
+/// Finding someone by tag and starting a conversation with them.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';

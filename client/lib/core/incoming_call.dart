@@ -1,3 +1,9 @@
+/// The handful of pieces of call state that have to be reachable from outside
+/// the call screen: an offer that arrived before the screen existed, the
+/// candidates that followed it, and which conversation is currently open or in
+/// a call.
+library;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class IncomingCall {

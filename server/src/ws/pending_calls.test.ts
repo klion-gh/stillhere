@@ -1,3 +1,6 @@
+/**
+ * Tests for the call signalling held while a pushed device wakes up.
+ */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {

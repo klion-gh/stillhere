@@ -1,3 +1,7 @@
+/// A single message. Consecutive messages from the same person are grouped, so
+/// only the first of a run carries the full spacing.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 

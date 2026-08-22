@@ -1,3 +1,6 @@
+/// The inline error banner and the app's brand mark.
+library;
+
 import 'package:flutter/material.dart';
 
 import '../core/theme.dart';

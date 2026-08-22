@@ -1,3 +1,10 @@
+/// Choosing a palette and a background.
+///
+/// Palette cards are drawn in the colours of the palette they offer rather than
+/// the active one, and each background is previewed by running the real
+/// animation in miniature — otherwise the names are guesswork.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

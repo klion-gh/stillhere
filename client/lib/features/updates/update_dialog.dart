@@ -1,3 +1,6 @@
+/// The download-and-install flow for a new release, run inside the app.
+library;
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';

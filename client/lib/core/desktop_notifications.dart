@@ -1,3 +1,8 @@
+/// Windows toasts for calls and messages, with the same actions the Android
+/// notifications carry. Mirrors core/call_notifications.dart on the desktop
+/// side.
+library;
+
 import 'package:local_notifier/local_notifier.dart';
 
 import 'call_notifications.dart';

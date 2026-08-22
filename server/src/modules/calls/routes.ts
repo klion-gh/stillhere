@@ -1,3 +1,7 @@
+/**
+ * Call support over HTTP: the ICE servers a client needs, and declining a call
+ * from a device whose app isn't running and therefore has no socket.
+ */
 import type { FastifyInstance } from "fastify";
 import { prisma } from "../../db/prisma.js";
 import { sendToUser } from "../../ws/connections.js";

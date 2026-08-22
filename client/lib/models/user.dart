@@ -1,3 +1,7 @@
+/// A user as the node describes them: identity, tag, and whether they have a
+/// picture.
+library;
+
 class AppUser {
   final String id;
   final String username;

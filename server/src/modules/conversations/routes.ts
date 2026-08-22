@@ -1,3 +1,7 @@
+/**
+ * Conversations: creating one, listing them with their last message, and
+ * paging through history.
+ */
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";

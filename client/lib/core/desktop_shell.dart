@@ -1,3 +1,9 @@
+/// Windows window and tray behaviour: closing hides to the tray instead of
+/// quitting, and the tray menu offers a real quit plus a notification toggle. A
+/// messenger that exits when you close the window stops receiving calls, which
+/// is not what closing a window is usually taken to mean. No-op off desktop.
+library;
+
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';

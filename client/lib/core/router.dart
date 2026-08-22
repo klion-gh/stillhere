@@ -1,3 +1,9 @@
+/// Routing, and the redirects that decide which of three states the app is in:
+/// not paired with a node, paired but signed out, or signed in. The router
+/// re-evaluates whenever either controller changes, so pairing, signing out or
+/// having a token rejected moves the user without any screen having to navigate.
+library;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';

@@ -1,3 +1,10 @@
+/// Avatar bytes, fetched through the app's own HTTP client.
+///
+/// Image.network can't be used: the endpoint sits behind the node-token gate,
+/// and a self-hosted node's certificate is usually self-signed, which only the
+/// pinned client trusts.
+library;
+
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';

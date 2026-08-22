@@ -1,3 +1,13 @@
+/// Certificate pinning for self-hosted nodes.
+///
+/// Most nodes present a self-signed certificate, which no CA vouches for. Dart
+/// only calls this back after normal validation has already failed, so a node
+/// with a real certificate never reaches it: pinning can't override a CA's
+/// verdict, only stand in where there is none. First contact accepts and records
+/// the fingerprint; a later mismatch means the certificate changed and the
+/// connection is refused.
+library;
+
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';

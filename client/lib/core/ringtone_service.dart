@@ -1,3 +1,9 @@
+/// The ring tones: incoming, and the ringback the caller hears while waiting.
+///
+/// Both loop until stopped, and the incoming one is routed to the phone's ringer
+/// stream so it follows the ringer volume and stays quiet when the phone is.
+library;
+
 import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';

@@ -1,3 +1,7 @@
+/// Persistence for the node connection: the one in use, and every node paired
+/// before. See features/connect/saved_node.dart for the record itself.
+library;
+
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';

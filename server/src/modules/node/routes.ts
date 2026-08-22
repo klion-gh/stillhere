@@ -1,3 +1,6 @@
+/**
+ * Pairing: exchanges the node password for a long-lived node token.
+ */
 import type { FastifyInstance } from "fastify";
 import bcrypt from "bcrypt";
 import { z } from "zod";

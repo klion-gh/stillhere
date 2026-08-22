@@ -1,3 +1,7 @@
+/// Downloads a release and hands it to the system installer, so updating never
+/// requires leaving the app for a browser.
+library;
+
 import 'dart:io';
 
 import 'package:dio/dio.dart';

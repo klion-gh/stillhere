@@ -1,3 +1,7 @@
+/**
+ * Verifies the user's access token and attaches their identity to the request.
+ * Applied per route, unlike the node gate, which covers everything.
+ */
 import fp from "fastify-plugin";
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import { verifyAccessToken } from "../modules/auth/tokens.js";

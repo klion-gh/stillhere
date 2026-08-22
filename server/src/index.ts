@@ -1,3 +1,11 @@
+/**
+ * Server entry point: plugins, routes, and the background jobs that outlive any
+ * request.
+ *
+ * Order matters. The node gate registers before the routes it protects, and the
+ * node password is hashed into the database before the first connection can
+ * try to use it.
+ */
 import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";

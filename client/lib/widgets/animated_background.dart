@@ -1,3 +1,11 @@
+/// The animated backdrop behind the full-screen flows.
+///
+/// Eight styles, all painted by one painter driven by one controller. Every term
+/// completes a whole number of cycles across the loop, so the frame at the end
+/// matches the frame at the start — a fractional rate anywhere makes the restart
+/// visible.
+library;
+
 import 'dart:math';
 
 import 'package:flutter/material.dart';

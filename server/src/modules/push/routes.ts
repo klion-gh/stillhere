@@ -1,3 +1,7 @@
+/**
+ * Device registration for push, and the endpoint that tells a client which
+ * Firebase project this node uses.
+ */
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";

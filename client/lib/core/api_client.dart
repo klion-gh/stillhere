@@ -1,3 +1,12 @@
+/// The authenticated HTTP client.
+///
+/// Layers the signed-in user's access token on top of the node-scoped client in
+/// features/connect/node_client.dart, and refreshes it once on a 401 before
+/// retrying — access tokens live about fifteen minutes, so a long session hits
+/// this constantly. Rebuilt whenever the node connection changes, since base URL
+/// and pinned certificate both belong to the node.
+library;
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

@@ -1,3 +1,11 @@
+/**
+ * The Firebase configuration a client needs, read from disk and handed over on
+ * request.
+ *
+ * None of it is secret — the same values sit inside every published app — which
+ * is why the node can serve it. The credential that authorises sending never
+ * leaves the server.
+ */
 import { readFileSync } from "node:fs";
 import { env } from "../../config/env.js";
 

@@ -1,3 +1,6 @@
+/// The signed-in user and their token pair.
+library;
+
 import '../../models/user.dart';
 
 class AuthState {

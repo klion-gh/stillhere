@@ -1,3 +1,13 @@
+/// Firebase Cloud Messaging, configured at runtime rather than at build time.
+///
+/// Each node has its own Firebase project and hands its configuration to the app
+/// when they pair, so one published build works against any node — nothing about
+/// a particular project is baked into the binary. Setup runs before the first
+/// frame on every launch, because the background message handler has to be
+/// registered each time: Android remembers a pointer to its compiled code, and
+/// that pointer goes stale when the app is updated.
+library;
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';

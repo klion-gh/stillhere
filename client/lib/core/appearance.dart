@@ -1,3 +1,10 @@
+/// The palettes and animated backgrounds the user can choose between, and the
+/// storage of that choice.
+///
+/// A palette redefines colour only. Layout, spacing and typography are identical
+/// across all six, so the app still looks like one product whichever is picked.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';

@@ -1,3 +1,13 @@
+/// Process entry point.
+///
+/// Everything here has to happen before the first frame, and the order is not
+/// arbitrary: locale data first (a missing locale turns a formatted date into a
+/// thrown exception and a grey box where the widget should be), push next (its
+/// background handler must be registered on every launch, because Android's
+/// stored pointer to it goes stale when the app is updated), then the desktop
+/// window and tray.
+library;
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';

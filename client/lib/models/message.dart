@@ -1,3 +1,6 @@
+/// A chat message, including when it was delivered and read.
+library;
+
 class ChatMessage {
   final String id;
   final String conversationId;

@@ -1,3 +1,10 @@
+/**
+ * Builds the ICE server list, including short-lived TURN credentials.
+ *
+ * TURN relays audio when a direct path can't be found, which is the common case
+ * between two mobile networks. The credentials are derived from a shared secret
+ * and expire on their own, so nothing long-lived is handed to a client.
+ */
 import crypto from "node:crypto";
 import { env } from "../../config/env.js";
 

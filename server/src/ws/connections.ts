@@ -1,3 +1,10 @@
+/**
+ * Who is connected, and how to reach them.
+ *
+ * Includes the heartbeat, without which a client that vanished without closing
+ * its socket stays registered forever and everything routed to it is written
+ * into the void.
+ */
 import type { WebSocket } from "ws";
 
 const connections = new Map<string, Set<WebSocket>>();

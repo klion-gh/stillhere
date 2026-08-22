@@ -1,3 +1,8 @@
+/// A Dio instance scoped to the node: its base URL, its node token, its pinned
+/// certificate. Used where the user's own token isn't needed or doesn't exist
+/// yet — pairing and signing in. core/api_client.dart layers the user on top.
+library;
+
 import 'dart:io';
 
 import 'package:dio/dio.dart';

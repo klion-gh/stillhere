@@ -1,3 +1,12 @@
+/// Android notifications for calls and messages.
+///
+/// Two channels for one incoming call: one that rings, used when the push
+/// arrived at a process that isn't running the app, and a silent one for when
+/// the app is alive and already looping the ring itself. A channel plays its
+/// sound exactly once, which is why the looping ring can't come from here. A
+/// third channel carries the controls for a call in progress.
+library;
+
 import 'dart:convert';
 import 'dart:io';
 

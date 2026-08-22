@@ -1,3 +1,11 @@
+/**
+ * The outer door: every request must prove it knows the node password, in the
+ * form of a token issued at pairing.
+ *
+ * A private node is not a public API. Only pairing, health and the socket are
+ * exempt — the socket carries its token in the query string, because a browser
+ * or mobile client can't always set headers on the handshake.
+ */
 import fp from "fastify-plugin";
 import type { FastifyPluginAsync } from "fastify";
 import { verifyNodeToken } from "../modules/node/tokens.js";

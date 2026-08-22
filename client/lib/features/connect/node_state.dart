@@ -1,3 +1,7 @@
+/// What the app knows about its node: address, token, and the certificate
+/// fingerprint pinned for it.
+library;
+
 class NodeState {
   final String? host;
   final String? nodeToken;

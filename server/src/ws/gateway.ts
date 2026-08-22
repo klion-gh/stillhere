@@ -1,3 +1,12 @@
+/**
+ * The socket: authentication, message relay and call signalling.
+ *
+ * Signalling is relayed rather than stored, with one exception. A callee whose
+ * device is asleep has no socket for the better part of ten seconds after being
+ * woken by push, so the offer and the candidates that follow it are held until
+ * one exists — dropping them leaves a call that rings, is answered, and then
+ * never connects.
+ */
 import type { FastifyInstance, FastifyBaseLogger } from "fastify";
 import type { WebSocket } from "ws";
 import { z } from "zod";

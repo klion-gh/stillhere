@@ -1,3 +1,6 @@
+/**
+ * Looking up a user by tag, which is how one person finds another.
+ */
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "../../db/prisma.js";

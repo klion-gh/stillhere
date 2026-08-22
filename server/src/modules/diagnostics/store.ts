@@ -1,3 +1,10 @@
+/**
+ * The diagnostic trail: whether it's recording, writing to it, and expiring it.
+ *
+ * Recording is off unless an operator turns it on, and entries are pruned after
+ * a few days. This records who did what and when, which is worth having while
+ * chasing a problem and not worth keeping afterwards.
+ */
 import type { FastifyBaseLogger } from "fastify";
 import { prisma } from "../../db/prisma.js";
 
